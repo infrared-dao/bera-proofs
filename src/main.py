@@ -1,25 +1,27 @@
 import json
 import re
-from sha3 import sha3_256
+
+# from sha3 import sha3_256
+from hashlib import sha256
 from typing import List, Dict, Any
 import math
 from dataclasses import dataclass
 
 # Constants for SSZ limits
-SLOTS_PER_HISTORICAL_ROOT = 8192  # For block_roots, state_roots
-EPOCHS_PER_HISTORICAL_VECTOR = 65536  # For randao_mixes
-MAX_VALIDATORS = 1099511627776  # For validators, balances, slashings
-EPOCHS_PER_SLASHINGS_VECTOR = 8192  # For slashings
-# SLOTS_PER_HISTORICAL_ROOT = 8  # For block_roots, state_roots
-# EPOCHS_PER_HISTORICAL_VECTOR = 8  # For randao_mixes
-# MAX_VALIDATORS = 69  # For validators, balances, slashings
-# EPOCHS_PER_SLASHINGS_VECTOR = 8  # For slashings
+# SLOTS_PER_HISTORICAL_ROOT = 8192  # For block_roots, state_roots
+# EPOCHS_PER_HISTORICAL_VECTOR = 65536  # For randao_mixes
+# MAX_VALIDATORS = 1099511627776  # For validators, balances, slashings
+# EPOCHS_PER_SLASHINGS_VECTOR = 8192  # For slashings
+SLOTS_PER_HISTORICAL_ROOT = 8  # For block_roots, state_roots
+EPOCHS_PER_HISTORICAL_VECTOR = 8  # For randao_mixes
+MAX_VALIDATORS = 69  # For validators, balances, slashings
+EPOCHS_PER_SLASHINGS_VECTOR = 8  # For slashings
 
 
 # Precompute zero node hashes for up to 40 levels
 ZERO_HASHES = [b"\0" * 32]
 for _ in range(40):
-    ZERO_HASHES.append(sha3_256(ZERO_HASHES[-1] + ZERO_HASHES[-1]).digest())
+    ZERO_HASHES.append(sha256(ZERO_HASHES[-1] + ZERO_HASHES[-1]).digest())
 
 # Define basic serialization functions
 def serialize_uint64(value: int) -> bytes:
@@ -227,9 +229,6 @@ def json_to_class(data: Any, cls: type) -> Any:
                 new_key = "parent_root"
             if isinstance(value, str) and value.startswith("0x"):
                 value = normalize_hex(value)
-                # if new_key == 'state_root':
-                #     print(f"state_root_reported_in_header: {value}")
-                #     value = '0x0000000000000000000000000000000000000000000000000000000000000000'
                 if new_key in {
                     "pubkey",
                     "withdrawal_credentials",
@@ -341,22 +340,22 @@ def load_and_process_state(state_file: str) -> BeaconState:
 #     elif type_str == 'uint64':
 #         serialized = serialize_uint64(value)
 #         padded = serialized + b'\0' * (32 - len(serialized))
-#         return sha3_256(padded).digest()
+#         return sha256(padded).digest()
 #     elif type_str == 'uint256':
 #         serialized = serialize_uint256(value)
-#         return sha3_256(serialized).digest()
+#         return sha256(serialized).digest()
 #     elif type_str == 'Boolean':
 #         serialized = serialize_bool(value)
 #         padded = serialized + b'\0' * (32 - len(serialized))
-#         return sha3_256(padded).digest()
+#         return sha256(padded).digest()
 #     elif type_str == 'bytes48':
 #         chunk1 = value[0:32]
 #         chunk2 = value[32:48] + b'\0' * 16
-#         return sha3_256(chunk1 + chunk2).digest()
+#         return sha256(chunk1 + chunk2).digest()
 #     elif type_str == 'bytes20':
 #         serialized = serialize_bytes(value, 20)
 #         padded = serialized + b'\0' * (32 - len(serialized))
-#         return sha3_256(padded).digest()
+#         return sha256(padded).digest()
 #     elif type_str == 'bytes256':
 #         chunks = [value[i:i+32] for i in range(0, 256, 32)]
 #         return merkle_root_list(chunks)
@@ -371,10 +370,10 @@ def load_and_process_state(state_file: str) -> BeaconState:
 #         else:
 #             if len(chunks[-1]) < 32:
 #                 chunks[-1] += b'\0' * (32 - len(chunks[-1]))
-#             chunk_hashes = [sha3_256(chunk).digest() for chunk in chunks]
+#             chunk_hashes = [sha256(chunk).digest() for chunk in chunks]
 #             chunks_root = merkle_root_list(chunk_hashes)
 #         length_packed = len(value).to_bytes(32, 'little')
-#         return sha3_256(chunks_root + length_packed).digest()
+#         return sha256(chunks_root + length_packed).digest()
 #     else:
 #         raise ValueError(f"Unsupported basic type: {type_str}")
 
@@ -401,7 +400,7 @@ def merkle_root_basic(value: Any, type_str: str) -> bytes:
     elif type_str == "bytes48":
         chunk1 = value[0:32]
         chunk2 = value[32:48] + b"\0" * 16
-        return sha3_256(chunk1 + chunk2).digest()  # >32 bytes, hash required
+        return sha256(chunk1 + chunk2).digest()  # >32 bytes, hash required
     elif type_str == "bytes20":
         serialized = serialize_bytes(value, 20)
         padded = serialized + b"\0" * (32 - len(serialized))
@@ -420,10 +419,10 @@ def merkle_root_basic(value: Any, type_str: str) -> bytes:
         else:
             if len(chunks[-1]) < 32:
                 chunks[-1] += b"\0" * (32 - len(chunks[-1]))
-            chunk_hashes = [sha3_256(chunk).digest() for chunk in chunks]
+            chunk_hashes = [sha256(chunk).digest() for chunk in chunks]
             chunks_root = merkle_root_list(chunk_hashes)
         length_packed = len(value).to_bytes(32, "little")
-        return sha3_256(
+        return sha256(
             chunks_root + length_packed
         ).digest()  # Variable-length, hash with length
     else:
@@ -472,16 +471,6 @@ def merkle_root_element(value: Any, elem_type: str) -> bytes:
         return merkle_root_basic(value, elem_type)
 
 
-# def merkle_root_list(roots: List[bytes]) -> bytes:
-#     if not roots:
-#         return b'\0' * 32
-#     n = len(roots)
-#     k = math.ceil(math.log2(max(n, 1)))
-#     num_leaves = 1 << k
-#     padded = roots + [b'\0' * 32] * (num_leaves - n)
-#     return build_merkle_tree(padded)[-1][0]
-
-
 def build_merkle_tree(leaves: List[bytes]) -> List[List[bytes]]:
     tree = [leaves]
     current = leaves
@@ -490,24 +479,22 @@ def build_merkle_tree(leaves: List[bytes]) -> List[List[bytes]]:
         for i in range(0, len(current), 2):
             left = current[i]
             right = current[i + 1] if i + 1 < len(current) else b"\0" * 32
-            parent = sha3_256(left + right).digest()
+            parent = sha256(left + right).digest()
             next_level.append(parent)
         tree.append(next_level)
         current = next_level
     return tree
 
 
-# def merkle_root_ssz_list(values: List[Any], elem_type: str) -> bytes:
-#     elements_roots = [merkle_root_element(v, elem_type) for v in values]
-#     elements_root = merkle_root_list(elements_roots)
-#     length_packed = len(values).to_bytes(32, 'little')
-#     return sha3_256(elements_root + length_packed).digest()
-
-
 def merkle_root_list(roots: List[bytes]) -> bytes:
     if not roots:
         return b"\0" * 32
-    return build_merkle_tree(roots)[-1][0]
+    # Pad to next power of two
+    n = len(roots)
+    k = math.ceil(math.log2(max(n, 1)))
+    num_leaves = 1 << k
+    padded = roots + [b"\0" * 32] * (num_leaves - n)
+    return build_merkle_tree(padded)[-1][0]
 
 
 def merkle_root_vector(values: List[Any], elem_type: str, limit: int) -> bytes:
@@ -517,19 +504,6 @@ def merkle_root_vector(values: List[Any], elem_type: str, limit: int) -> bytes:
     return merkle_root_list(elements_roots)
 
 
-# def merkle_root_ssz_list(values: List[Any], elem_type: str, limit: int) -> bytes:
-#     elements_roots = [merkle_root_element(v, elem_type) for v in values]
-#     if elem_type == 'uint64':
-#         # Pad uint64 elements to 32 bytes
-#         elements_roots = [serialize_uint64(v).ljust(32, b'\x00') for v in values]
-#     depth = math.ceil(math.log2(limit))
-#     root = merkle_root_list(elements_roots)
-#     for i in range(depth):
-#         root = sha3_256(root + ZERO_HASHES[i]).digest()
-#     length_packed = len(values).to_bytes(32, 'little')
-#     return sha3_256(root + length_packed).digest()
-
-
 def merkle_root_ssz_list(values: List[Any], elem_type: str, limit: int) -> bytes:
     if not values:
         chunks_root = b"\0" * 32
@@ -537,7 +511,7 @@ def merkle_root_ssz_list(values: List[Any], elem_type: str, limit: int) -> bytes
         elements_roots = [merkle_root_element(v, elem_type) for v in values]
         chunks_root = merkle_root_list(elements_roots)
     length_packed = len(values).to_bytes(32, "little")
-    return sha3_256(chunks_root + length_packed).digest()
+    return sha256(chunks_root + length_packed).digest()
 
 
 def get_proof(tree: List[List[bytes]], index: int) -> List[bytes]:
@@ -581,28 +555,45 @@ def generate_merkle_witness(
     proof_state = get_proof(
         build_merkle_tree(
             [
+                # Field (0): genesis_validators_root
                 merkle_root_basic(state.genesis_validators_root, "bytes32"),
+                # Field (1): slot
                 merkle_root_basic(state.slot, "uint64"),
+                # Field (2): fork
                 state.fork.merkle_root(),
+                # Field (3): latest_block_header
                 state.latest_block_header.merkle_root(),
+                # Field (4): block_roots
                 merkle_root_vector(
                     state.block_roots, "bytes32", SLOTS_PER_HISTORICAL_ROOT
                 ),
+                # Field (5): state_roots
                 merkle_root_vector(
                     state.state_roots, "bytes32", SLOTS_PER_HISTORICAL_ROOT
                 ),
+                # Field (6): eth1_data
                 state.eth1_data.merkle_root(),
+                # Field (7): eth1_deposit_index
                 merkle_root_basic(state.eth1_deposit_index, "uint64"),
+                # Field (8): latest_execution_payload_header
+                state.latest_execution_payload_header.merkle_root(),
+                # Field (9): validators
                 validators_root,
+                # Field (10): balances
                 merkle_root_ssz_list(state.balances, "uint64", MAX_VALIDATORS),
+                # Field (11): randao_mixes
                 merkle_root_vector(
                     state.randao_mixes, "bytes32", EPOCHS_PER_HISTORICAL_VECTOR
                 ),
+                # Field (12): next_withdrawal_index
                 merkle_root_basic(state.next_withdrawal_index, "uint64"),
+                # Field (13): next_withdrawal_validator_index
                 merkle_root_basic(state.next_withdrawal_validator_index, "uint64"),
+                # Field (14): slashings
                 merkle_root_vector(
                     state.slashings, "uint64", EPOCHS_PER_SLASHINGS_VECTOR
                 ),
+                # Field (15): total_slashing
                 merkle_root_basic(state.total_slashing, "uint64"),
             ]
         ),

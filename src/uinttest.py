@@ -1,5 +1,6 @@
 import unittest
-import hashlib
+
+# from hashlib import sha256
 
 from main import *
 
@@ -48,14 +49,14 @@ class TestBlockchainFunctions(unittest.TestCase):
         self.assertEqual(merkle_root_basic(b"\x01" * 32, "bytes32"), b"\x01" * 32)
         padded_uint = b"\x64\x00\x00\x00\x00\x00\x00\x00" + b"\x00" * 24
         self.assertEqual(merkle_root_basic(100, "uint64"), padded_uint)
-        # print(f"sha3: {sha3_256(padded_uint).digest().hex()}, hashlib: {hashlib.sha256(padded_uint).digest().hex()}")
+        # print(f"sha3: {sha256(padded_uint).digest().hex()}, hashlib: {hashlib.sha256(padded_uint).digest().hex()}")
         padded_bool = b"\x01" + b"\x00" * 31
         self.assertEqual(merkle_root_basic(True, "Boolean"), padded_bool)
 
     def test_merkle_root_list(self):
         self.assertEqual(merkle_root_list([]), b"\x00" * 32)
         self.assertEqual(merkle_root_list([b"\x01" * 32]), b"\x01" * 32)
-        two_elements = sha3_256(b"\x01" * 32 + b"\x02" * 32).digest()
+        two_elements = sha256(b"\x01" * 32 + b"\x02" * 32).digest()
         self.assertEqual(merkle_root_list([b"\x01" * 32, b"\x02" * 32]), two_elements)
 
     def test_merkle_root_ssz_list(self):
@@ -64,13 +65,13 @@ class TestBlockchainFunctions(unittest.TestCase):
         elements_roots = [merkle_root_basic(123, "uint64")]
         chunks_root = merkle_root_list(elements_roots)
         length_packed = len(elements).to_bytes(32, "little")
-        expected = sha3_256(chunks_root + length_packed).digest()
+        expected = sha256(chunks_root + length_packed).digest()
         self.assertEqual(
             merkle_root_ssz_list(elements, "uint64", MAX_VALIDATORS), expected
         )
         # Empty list
         length_packed = (0).to_bytes(32, "little")
-        expected = sha3_256(b"\x00" * 32 + length_packed).digest()
+        expected = sha256(b"\x00" * 32 + length_packed).digest()
         self.assertEqual(merkle_root_ssz_list([], "uint64", MAX_VALIDATORS), expected)
 
     def test_merkle_root_vector(self):
@@ -104,6 +105,46 @@ class TestBlockchainFunctions(unittest.TestCase):
         self.assertEqual(fork.previous_version, b"\x01\x02\x03\x04")
         self.assertEqual(fork.current_version, b"\x05\x06\x07\x08")
         self.assertEqual(fork.epoch, 123)
+
+    def test_merkleize_header(self):
+        data = {
+            "slot": "5703797",
+            "proposer_index": "51",
+            "parent_root": "0x1913775a098a6b8fcaf01b087bc81b49cae260efc590480672e0058d41267aa7",
+            "state_root": "0xe9cf5760a7e029ca578c53b1ceb3dba31a45e881edbb754a80336fef6e917aa9",
+            "body_root": "0xaf2ca5708703fbce19cab72b4b35d37bbf132c79e16881cc0577fc6da56934bb",
+        }
+        header = json_to_class(data, BeaconBlockHeader)
+        # print(header.slot, header.proposer_index, header.parent_root.hex(), header.state_root.hex(), header.body_root.hex())
+        # Compute expected Merkle root manually
+        leaves = [
+            serialize_uint64(5703797) + b"\x00" * 24,
+            serialize_uint64(51) + b"\x00" * 24,
+            bytes.fromhex(
+                "1913775a098a6b8fcaf01b087bc81b49cae260efc590480672e0058d41267aa7"
+            ),
+            bytes.fromhex(
+                "e9cf5760a7e029ca578c53b1ceb3dba31a45e881edbb754a80336fef6e917aa9"
+            ),
+            bytes.fromhex(
+                "af2ca5708703fbce19cab72b4b35d37bbf132c79e16881cc0577fc6da56934bb"
+            ),
+            b"\x00" * 32,
+            b"\x00" * 32,
+            b"\x00" * 32,
+        ]
+        tree = build_merkle_tree(leaves)
+        # for branch in tree:
+        #     for leaf in branch:
+        #         print(f"leaf: {leaf.hex()}")
+        expected_root = tree[-1][0]
+        self.assertEqual(header.merkle_root(), expected_root)
+        self.assertEqual(
+            header.merkle_root(),
+            bytes.fromhex(
+                "ede734ed54e9cff6ef9700404491c77187fd958c29150f9548bf5abc86d50dee"
+            ),
+        )
 
     def test_generate_merkle_witness(self):
         proof, state_root = generate_merkle_witness("test/data/state.json", 39)
