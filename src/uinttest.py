@@ -106,6 +106,104 @@ class TestBlockchainFunctions(unittest.TestCase):
         self.assertEqual(fork.current_version, b"\x05\x06\x07\x08")
         self.assertEqual(fork.epoch, 123)
 
+    def test_merkle_root_ssz_list_validators(self):
+        validators = [
+            Validator(
+                pubkey=b"\x01" * 48,
+                withdrawal_credentials=b"\x02" * 32,
+                effective_balance=32000000,
+                slashed=False,
+                activation_eligibility_epoch=0,
+                activation_epoch=0,
+                exit_epoch=0,
+                withdrawable_epoch=0,
+            )
+        ]
+        elements_roots = [v.merkle_root() for v in validators]
+        chunks_root = merkle_root_list(elements_roots)
+        length_packed = (1).to_bytes(32, "little")
+        expected = sha256(chunks_root + length_packed).digest()
+        self.assertEqual(
+            merkle_root_ssz_list(validators, "Validator", MAX_VALIDATORS), expected
+        )
+
+    def test_merkle_root_vector_block_roots(self):
+        roots = [b"\x01" * 32, b"\x02" * 32]
+        padded = roots + [b"\x00" * 32] * (SLOTS_PER_HISTORICAL_ROOT - 2)
+        expected = merkle_root_list(padded)
+        self.assertEqual(
+            merkle_root_vector(roots, "bytes32", SLOTS_PER_HISTORICAL_ROOT), expected
+        )
+
+    def test_json_to_class_beacon_state(self):
+        data = {
+            "genesisValidatorsRoot": "0x" + "01" * 32,
+            "slot": "123",
+            "fork": {
+                "previousVersion": "0x00000000",
+                "currentVersion": "0x00000000",
+                "epoch": "0",
+            },
+            "latestBlockHeader": {
+                "slot": "0",
+                "proposerIndex": "0",
+                "parentRoot": "0x" + "00" * 32,
+                "stateRoot": "0x" + "00" * 32,
+                "bodyRoot": "0x" + "00" * 32,
+            },
+            "blockRoots": ["0x" + "02" * 32] * 8,
+            "stateRoots": ["0x" + "03" * 32] * 8,
+            "eth1Data": {
+                "depositRoot": "0x" + "00" * 32,
+                "depositCount": "0",
+                "blockHash": "0x" + "00" * 32,
+            },
+            "eth1DepositIndex": "0",
+            "latestExecutionPayloadHeader": {
+                "parentHash": "0x" + "00" * 32,
+                "feeRecipient": "0x" + "00" * 20,
+                "stateRoot": "0x" + "00" * 32,
+                "receiptsRoot": "0x" + "00" * 32,
+                "logsBloom": "0x" + "00" * 256,
+                "prevRandao": "0x" + "00" * 32,
+                "blockNumber": "0",
+                "gasLimit": "0",
+                "gasUsed": "0",
+                "timestamp": "0",
+                "extraData": "0x",
+                "baseFeePerGas": "0x" + "00" * 32,
+                "blockHash": "0x" + "00" * 32,
+                "transactionsRoot": "0x" + "00" * 32,
+                "withdrawalsRoot": "0x" + "00" * 32,
+                "blobGasUsed": "0",
+                "excessBlobGas": "0",
+                "base_fee_per_gas": "3884",
+            },
+            "validators": [
+                {
+                    "pubkey": "0x" + "04" * 48,
+                    "withdrawalCredentials": "0x" + "00" * 32,
+                    "effectiveBalance": "32000000",
+                    "slashed": False,
+                    "activationEligibilityEpoch": "0",
+                    "activationEpoch": "0",
+                    "exitEpoch": "0",
+                    "withdrawableEpoch": "0",
+                }
+            ],
+            "balances": ["32000000"],
+            "randaoMixes": ["0x" + "05" * 32] * 8,
+            "nextWithdrawalIndex": "0",
+            "nextWithdrawalValidatorIndex": "0",
+            "slashings": ["0"],
+            "totalSlashing": "0",
+        }
+        state = json_to_class(data, BeaconState)
+        self.assertEqual(state.slot, 123)
+        self.assertEqual(state.genesis_validators_root, b"\x01" * 32)
+        self.assertEqual(len(state.validators), 1)
+        self.assertEqual(state.validators[0].pubkey, b"\x04" * 48)
+
     def test_merkleize_header(self):
         data = {
             "slot": "5703797",
@@ -142,7 +240,7 @@ class TestBlockchainFunctions(unittest.TestCase):
         self.assertEqual(
             header.merkle_root(),
             bytes.fromhex(
-                "ede734ed54e9cff6ef9700404491c77187fd958c29150f9548bf5abc86d50dee"
+                "ede734ed54e9cff6ef9700404491c77187fd958c29150f9548bf5abc86d50dee"  # parent hash of next slot
             ),
         )
 
