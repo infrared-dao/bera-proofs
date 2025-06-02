@@ -1,7 +1,5 @@
 import unittest
-
-# from hashlib import sha256
-
+from dataclasses import fields
 from main import *
 
 
@@ -310,6 +308,124 @@ class TestBlockchainFunctions(unittest.TestCase):
 
         # proof_list = get_proof(validators_tree, validator_index)
 
+    # some ref tests
+    # https://github.com/ethereum/consensus-spec-tests
+    def test_eth1_data_merkle(self):
+        header = Eth1Data(
+            deposit_root=bytes.fromhex(
+                "9b5668ffd8b1d0b8f497b9d430341a0e199087d3a4426adc404c10e199d207db"
+            ),
+            deposit_count=864455600355765796,
+            block_hash=bytes.fromhex(
+                "04a473fd6629f54f3f2c238bfe77f0965ca85924cefd8772256faffb06103ab8"
+            ),
+        )
+        final_root = header.merkle_root()
+        self.assertEqual(
+            final_root.hex(),
+            "410c5f2ad586471a6b858503a6044ba8d4515168bae6753907315dc84e65a349",
+        )
+
+    def test_fork_merkle(self):
+        header = Fork(
+            previous_version=bytes.fromhex("22085f34"),
+            current_version=bytes.fromhex("6759798c"),
+            epoch=48711760419766586,
+        )
+        final_root = header.merkle_root()
+        self.assertEqual(
+            final_root.hex(),
+            "12db905a772366069bed4d2e165f51d7afd78a72f4e485d2b1eb1c0b6142252f",
+        )
+
+    def test_execution_payload_header_merkle(self):
+        header = ExecutionPayloadHeader(
+            parent_hash=bytes.fromhex(
+                "dc74572718fd0c3e947ccc4287f2f5d2e9e8fb9520c055ce6548ad5ccb3f9e33"
+            ),
+            fee_recipient=bytes.fromhex("b6083bad5a4d3134d709539ed3dc09b8be90c6a6"),
+            state_root=bytes.fromhex(
+                "baf1d72bb2c2189f564bae2cebdccd7d3ba3434687ff2f5f61b5a36c1aa04b55"
+            ),
+            receipts_root=bytes.fromhex(
+                "5db20defa6b67308b95bfae8c9f9d8ccc706cd8ad84396a7b14684b1a3cf7373"
+            ),
+            logs_bloom=bytes.fromhex(
+                "892e55ade5f7bc1b7f001b2355cc82397e53dac69a23d34b17a0f4b4038d68a07481a8fc2ffeca71700ee7cd16f3c13165ad826aa9dddb81e1b0ac53df7fa3759175af49cf432cfe8a27a41bef548533465510366ae8c827eb83374cb85da70e0a61866c56466cc62a13aacd5cc671b5876757c37ffb7425b0c8e94b16f8e4285098b7a237bd48ba3518580d1b91c974d502e3a3acf05350b898c7141ee8adb8698ea7a59e8d48d33e3eed5bb9a46886ee3f95072e9a792101c41686e5c837e0fd13e902c08896670719adb4d918d6ef9cf9ec6f5be597e3d81a7293ee6a72b68aac10402ddeb5f814da4e0e412e98b1ba95a0395766fac26270aaf5c81a3263"
+            ),
+            prev_randao=bytes.fromhex(
+                "a5e764e111faa88ef4a97717d70320040c9238f0d355a35c1e7b820457b99431"
+            ),
+            block_number=16341509426905322341,
+            gas_limit=12493063017558285766,
+            gas_used=14609395124503691893,
+            timestamp=1544961326346202544,
+            extra_data=bytes.fromhex(
+                "7d93909becdef90c36cfbcba695fd0e69102b37dfd05afb370672090e7"
+            ),
+            base_fee_per_gas=61884265331504407787052872047516276847429314869981376707991449424234902978858,  # Will be fixed to bytes
+            block_hash=bytes.fromhex(
+                "d12c3a50b09aa835c00c7ac3038e23bbb067e932eae13718009cd1c35feaf46f"
+            ),
+            transactions_root=bytes.fromhex(
+                "f59f0643c89235a7261955bebaff5b134a31c3f0251b89b21a8f7e3f998fa351"
+            ),
+            withdrawals_root=bytes.fromhex(
+                "99e2b76ffa8087b096b0c7bfd79bb31a57669127ded9d13aea9e71e724d3cf16"
+            ),
+            blob_gas_used=7719391158488866226,
+            excess_blob_gas=14548901732660767201,
+        )
+        final_root = header.merkle_root()
+        self.assertEqual(
+            final_root.hex(),
+            "e6b87e3797a1d9a297c1f58b87b9c38911b5ed524f2ccbe61b785204ec0380d9",
+        )
+
+    def test_execution_payload_header_merkle2(self):
+        header = ExecutionPayloadHeader(
+            parent_hash=bytes.fromhex(
+                "897e1cce86fe0a1175937648a4816f3303b1fe30dd33f13c894688058366e9c6"
+            ),
+            fee_recipient=bytes.fromhex("68a04dBAc577D1a9E8442fd368C50D65d304Ab17"),
+            state_root=bytes.fromhex(
+                "588ee67eac70377d054fa9e0a8fa6108d7e8098a348afb22ac4f289ae0fea1e6"
+            ),
+            receipts_root=bytes.fromhex(
+                "1fdaf3cac88f30202a65cccc3ef21cdcecc8915f198c77fbf21b283515cff708"
+            ),
+            logs_bloom=bytes.fromhex(
+                "0018020040042000800080000200000000000000080000100014013000010000000040000000201000080040100020010100018200006000000000000820042000080000000000080080000801200080000040000200000200110800052000000400000002020040100000001400080000000408000408000200001000081000920440003521000004311400800000000008000080000100000088400000000042000001000a24000280200008000000001100024000000005000000000000240000000202000001029101002000640000002101001020000020042000002000109084080008000001000801024180040008800100004000c220004804020020"
+            ),
+            prev_randao=bytes.fromhex(
+                "01b9a537f2e0a7cf4bb3d298f512f9c478e4f2f9e915b04ddfeef95c4e0b75b8"
+            ),
+            block_number=5788402,
+            gas_limit=36000000,
+            gas_used=1861457,
+            timestamp=1748773066,
+            extra_data=bytes.fromhex(
+                "d883010f0b846765746888676f312e32342e32856c696e7578"
+            ),
+            base_fee_per_gas=8,  # Will be fixed to bytes
+            block_hash=bytes.fromhex(
+                "76b247f73fc1b65353c7e4e3ed1a3e8652e261decc8afca6756de6733ad1b25a"
+            ),
+            transactions_root=bytes.fromhex(
+                "501de7cbf8dfc9028c8063398b1b20d1ad74fb8951b6e0fcfe735ea2b26b976c"
+            ),
+            withdrawals_root=bytes.fromhex(
+                "ad48c078abc7af2fc02142b76d431a3d09661349486debb0ad2bea224392cb6c"
+            ),
+            blob_gas_used=0,
+            excess_blob_gas=0,
+        )
+        final_root = header.merkle_root()
+        self.assertEqual(
+            final_root.hex(),
+            "6c1d76195c93d80260c2d4134aacdb969907113de90909da620100fa579eb0c5",
+        )
+
     def test_validator_pubkey_proof(self):
         header_data = {
             "slot": "0x5852f2",
@@ -429,7 +545,7 @@ class TestBlockchainFunctions(unittest.TestCase):
         validator_root = validator.merkle_root()
 
         # verify validator list
-        state = load_and_process_state("test/data/state.json")
+        state = load_and_process_state("test/data/state2.json")
         elements_roots = [merkle_root_element(v, "Validator") for v in state.validators]
         val_list_tree = merkle_list_tree(elements_roots)
         index = 51  # Validator index = 51
@@ -445,6 +561,7 @@ class TestBlockchainFunctions(unittest.TestCase):
         index_all = index_all_2
         length_packed = len(elements_roots).to_bytes(32, "little")
         validators_list_leaf = sha256(val_list_tree[-1][0] + length_packed).digest()
+        print(f"val__list_leaf: {validators_list_leaf.hex()}")
 
         # verify val list leaf in beacon state
         state_fields = [
@@ -483,6 +600,12 @@ class TestBlockchainFunctions(unittest.TestCase):
             # Field (15): total_slashing
             merkle_root_basic(state.total_slashing, "uint64"),
         ]
+        # print(f"state fields: {[field.hex() for field in state_fields]}")
+        # for field in fields(state.latest_execution_payload_header):
+        #     value=getattr(state.latest_execution_payload_header, field.name)
+        #     if isinstance(value, (bytes)):
+        #         value = value.hex()
+        #     print(f"{field.name}: {value}")
         # Pad to next power of two
         n = len(state_fields)
         k = math.ceil(math.log2(max(n, 1)))
@@ -495,10 +618,10 @@ class TestBlockchainFunctions(unittest.TestCase):
         )  # validators at index 9
 
         for i in range(0, len(proof_state)):
-            print(f"actual proof: {proof[i + index_all_2].hex()}")
+            print(f"actual proof: {proof[i + index_all_2 + 34].hex()}")
             print(f"gen proof: {proof_state[i].hex()}")
             # fails here
-            self.assertEqual(proof[i + index_all_2], proof_state[i])
+            self.assertEqual(proof[i + index_all_2 + 34], proof_state[i])
             index_all += 1
 
         # index = 51  # Assuming validator index 51

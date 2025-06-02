@@ -214,7 +214,7 @@ class BeaconState:
             ("randao_mixes", f"Vector[bytes32, {EPOCHS_PER_HISTORICAL_VECTOR}]"),
             ("next_withdrawal_index", "uint64"),
             ("next_withdrawal_validator_index", "uint64"),
-            ("slashings", f"List[uint64, {MAX_VALIDATORS}]"),
+            ("slashings", f"Vector[uint64, {EPOCHS_PER_SLASHINGS_VECTOR}]"),
             ("total_slashing", "uint64"),
         ]
         return merkle_root_container(self, fields)
@@ -292,6 +292,9 @@ def json_to_class(data: Any, cls: type) -> Any:
             # Provide default values for missing fields
             processed["next_withdrawal_index"] = processed.get(
                 "next_withdrawal_index", 0
+            )
+            processed["next_withdrawal_validator_index"] = processed.get(
+                "next_withdrawal_validator_index", 0
             )
             processed["slashings"] = processed.get("slashings", [])
             processed["total_slashing"] = processed.get("total_slashing", 0)
