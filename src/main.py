@@ -13,10 +13,11 @@ from dataclasses import dataclass
 # MAX_VALIDATORS = 1099511627776  # For validators, balances, slashings
 # EPOCHS_PER_SLASHINGS_VECTOR = 8192  # For slashings
 SLOTS_PER_HISTORICAL_ROOT = 8  # For block_roots, state_roots
-EPOCHS_PER_HISTORICAL_VECTOR = 8  # For randao_mixes
+# EPOCHS_PER_HISTORICAL_VECTOR = 8  # For randao_mixes
+EPOCHS_PER_HISTORICAL_VECTOR = 65536  # For randao_mixes
 MAX_VALIDATORS = 69  # For validators, balances, slashings
 EPOCHS_PER_SLASHINGS_VECTOR = 8  # For slashings
-
+VALIDATOR_REGISTRY_LIMIT = 1099511627776
 BYTES_PER_LOGS_BLOOM = 256
 
 
@@ -209,8 +210,8 @@ class BeaconState:
             ("eth1_data", "Eth1Data"),
             ("eth1_deposit_index", "uint64"),
             ("latest_execution_payload_header", "ExecutionPayloadHeader"),
-            ("validators", f"List[Validator, {MAX_VALIDATORS}]"),
-            ("balances", f"List[uint64, {MAX_VALIDATORS}]"),
+            ("validators", f"List[Validator, {VALIDATOR_REGISTRY_LIMIT}]"),
+            ("balances", f"List[uint64, {VALIDATOR_REGISTRY_LIMIT}]"),
             ("randao_mixes", f"Vector[bytes32, {EPOCHS_PER_HISTORICAL_VECTOR}]"),
             ("next_withdrawal_index", "uint64"),
             ("next_withdrawal_validator_index", "uint64"),
@@ -497,6 +498,97 @@ def merkle_root_ssz_list(values: List[Any], elem_type: str, limit: int) -> bytes
     return sha256(chunks_root + length_packed).digest()
 
 
+def get_fixed_capacity_proof(
+    leaves: List[bytes], index: int, capacity: int
+) -> List[bytes]:
+    """
+    Build a Merkle proof for `index` in a tree of exactly `capacity` leaves,
+    where:
+      • The first len(leaves) are “real” leaf hashes (32 bytes each).
+      • The remaining (capacity - len(leaves)) leaf positions are implicitly zero-leaves.
+    capacity must be a power of two (e.g. 2^40 for validators).
+    Returns a list of log2(capacity) sibling hashes.
+    """
+    assert (capacity & (capacity - 1)) == 0, "capacity must be a power of two"
+    n_real = len(leaves)
+    assert 0 <= index < n_real, "index must lie within the real leaves"
+
+    proof: List[bytes] = []
+    depth = capacity.bit_length() - 1  # since capacity = 2^depth
+
+    # current_index = the position of our target leaf at the current level
+    current_index = index
+    # num_real = how many “real” nodes exist at this level
+    num_real = n_real
+
+    # We'll build only the “real” subtree hashes up to the root of the real chunk.
+    # On each iteration, we compute the array `parents` that holds the real parents for the next level.
+    parents: List[bytes]
+
+    for level in range(depth):
+        sibling_index = current_index ^ 1
+
+        # 1) Determine sibling_hash at this level:
+        if level == 0:
+            # Level 0: siblings come from the `leaves[]` or are zero if beyond n_real
+            if sibling_index < num_real:
+                sibling_hash = leaves[sibling_index]
+            else:
+                sibling_hash = ZERO_HASHES[0]
+        else:
+            # Level > 0: siblings come from the previous level’s `parents[]` or ZERO_HASHES[level]
+            if sibling_index < len(parents):
+                sibling_hash = parents[sibling_index]
+            else:
+                sibling_hash = ZERO_HASHES[level]
+
+        proof.append(sibling_hash)
+
+        # 2) Build the next‐level “parents” array from the current real nodes only:
+        if level == 0:
+            # Start from leaf level: pair up `leaves[i]` (if i < num_real) or ZERO_HASHES[0]
+            parents = []
+            for i in range(0, num_real, 2):
+                left = leaves[i]
+                right = leaves[i + 1] if (i + 1) < num_real else ZERO_HASHES[0]
+                parents.append(sha256(left + right).digest())
+            num_real = (num_real + 1) // 2
+        else:
+            # We already have a `parents` from the previous iteration's “left/right hashing.”
+            new_parents: List[bytes] = []
+            # Only iterate over *actual* real parents, not capacity
+            for i in range(0, num_real, 2):
+                left = parents[i]
+                right = parents[i + 1] if (i + 1) < num_real else ZERO_HASHES[level]
+                new_parents.append(sha256(left + right).digest())
+            parents = new_parents
+            num_real = (num_real + 1) // 2
+
+        current_index //= 2
+
+    return proof
+
+
+def compute_root_from_proof(leaf: bytes, index: int, proof: List[bytes]) -> bytes:
+    """
+    Rebuild the Merkle root from a 32‐byte leaf and its fixed‐capacity proof.
+    - leaf: 32‐byte hash of the target element.
+    - index: 0-based position of that leaf in the capacity-sized tree.
+    - proof: list of sibling hashes, one per level, as returned by get_fixed_capacity_proof.
+    Returns the reconstructed 32‐byte Merkle root.
+    """
+    current = leaf
+    for level, sibling in enumerate(proof):
+        # Check the bit at position `level` in `index`:
+        if ((index >> level) & 1) == 0:
+            # Our node was on the left, sibling is on the right
+            current = sha256(current + sibling).digest()
+        else:
+            # Our node was on the right, sibling is on the left
+            current = sha256(sibling + current).digest()
+    return current
+
+
 def get_proof(tree: List[List[bytes]], index: int) -> List[bytes]:
     proof = []
     level = 0
@@ -538,16 +630,36 @@ def generate_merkle_witness(
     # validators_tree = build_merkle_tree(validator_roots)
     # validators_root = validators_tree[-1][0]
     validators_root = merkle_root_ssz_list(
-        state.validators, "Validator", MAX_VALIDATORS
+        state.validators, "Validator", VALIDATOR_REGISTRY_LIMIT
     )
-    validators_tree = build_merkle_tree([v.merkle_root() for v in state.validators])
+    validators_tree = merkle_list_tree([v.merkle_root() for v in state.validators])
     print(validators_root.hex())
 
+    elements_roots = [merkle_root_element(v, "Validator") for v in state.validators]
+
+    # Berachain treats the validator registry as exactly Vector[Validator, 2^40].
+    validator_capacity = VALIDATOR_REGISTRY_LIMIT  # 2^40
+
+    # We need a proof for index 51 in a 2^40‐sized tree,
+    # where only the first len(elements_roots) leaves are “real” and the rest are zeros.
+    validator_list_proof = get_fixed_capacity_proof(
+        elements_roots, index=validator_index, capacity=validator_capacity
+    )
+    length_chunk = len(elements_roots).to_bytes(32, "little")  # b'\x45' + b'\x00'*31
+    validator_list_proof.append(length_chunk)
+
+    leaf = elements_roots[validator_index]
+
+    validators_root = compute_root_from_proof(
+        leaf, validator_index, validator_list_proof
+    )
+    # validators_root = sha256(validators_root + length_chunk).digest()
+
     # Compute state root
-    state_root = state.merkle_root()
+    # state_root = state.merkle_root()
 
     # Generate proofs
-    proof_list = get_proof(validators_tree, validator_index)
+    # proof_list = get_proof(validators_tree, validator_index)
 
     state_fields = [
         # Field (0): genesis_validators_root
@@ -571,9 +683,14 @@ def generate_merkle_witness(
         # Field (9): validators
         validators_root,
         # Field (10): balances
+        # merkle_root_vector(state.balances, "uint64", MAX_VALIDATORS),
         merkle_root_ssz_list(state.balances, "uint64", MAX_VALIDATORS),
+        # merkle_root_ssz_list(state.balances, "uint64", VALIDATOR_REGISTRY_LIMIT),
         # Field (11): randao_mixes
-        merkle_root_vector(state.randao_mixes, "bytes32", EPOCHS_PER_HISTORICAL_VECTOR),
+        # merkle_root_vector(state.randao_mixes, "bytes32", EPOCHS_PER_HISTORICAL_VECTOR),
+        merkle_root_ssz_list(
+            state.randao_mixes, "bytes32", EPOCHS_PER_HISTORICAL_VECTOR
+        ),
         # Field (12): next_withdrawal_index
         merkle_root_basic(state.next_withdrawal_index, "uint64"),
         # Field (13): next_withdrawal_validator_index
@@ -589,13 +706,24 @@ def generate_merkle_witness(
     num_leaves = 1 << k
     padded = state_fields + [b"\0" * 32] * (num_leaves - n)
 
-    proof_state = get_proof(
-        build_merkle_tree(padded),
-        9,
-    )  # validators at index 9
+    # proof_state = get_proof(
+    #     build_merkle_tree(padded),
+    #     9,
+    # )  # validators at index 9
+
+    # Berachain treats BeaconState as a Vector of length 32 (i.e., pad 16→32).
+    state_capacity = 32
+    # We want a proof for field index 9 in a 32‐leaf tree
+    proof_state = get_fixed_capacity_proof(
+        state_fields, index=9, capacity=state_capacity
+    )
+
+    leaf = state_fields[9]
+
+    state_root = compute_root_from_proof(leaf, 9, proof_state)
 
     # Combine proofs
-    full_proof = proof_list + proof_state
+    full_proof = validator_list_proof + proof_state
     return full_proof, state_root
 
 

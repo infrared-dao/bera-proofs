@@ -338,6 +338,117 @@ class TestBlockchainFunctions(unittest.TestCase):
             "12db905a772366069bed4d2e165f51d7afd78a72f4e485d2b1eb1c0b6142252f",
         )
 
+    def test_vector_real(self):
+        elements = [
+            bytes.fromhex(
+                "970f4e852916ed31b95239de091029f83e86ba5359e2345691e70dc87bb109d6"
+            ),
+            bytes.fromhex(
+                "bc82b96e84829ffd3a0e790225b6594384740dcdea41ed42ce96af68cbb76b71"
+            ),
+            bytes.fromhex(
+                "9acedf527f50725cd9f2bfe400a0c859ac8b2975f0e7a55801a8f5cc9178e7b1"
+            ),
+            bytes.fromhex(
+                "aa3b19dd65d9f8348de6f5c28fa9e954e673c79f03e77d38082bcfa0df83293b"
+            ),
+            bytes.fromhex(
+                "d570ee0d2fa7174de211298b3ed60c80a6c9905f9955bf7f0e3ef3335fb8e026"
+            ),
+            bytes.fromhex(
+                "8ef9de00a9dcf36918147c87be4e3f970f26c3b786ae38bb7e41d17722ccd8c1"
+            ),
+            bytes.fromhex(
+                "7742784e94df30f1190d885fcac0b2954e02867f7181de4495890fc4c9749caa"
+            ),
+            bytes.fromhex(
+                "b31c73df03727b66274e077a07e280b1c920c0dc846fc721ba4a6de0d7ae18ee"
+            ),
+        ]
+        final_root = merkle_root_vector(elements, "bytes32", 8)
+        self.assertEqual(
+            final_root.hex(),
+            "4c1394e7bb95932f48b57d79bb6dcf2ed92ed72d42db22acbd3f2dc8af184b10",
+        )
+
+    def test_list_real(self):
+        elements = [
+            500000000000000,
+            500000000000000,
+            250000000000000,
+            250000000000000,
+            250000000000000,
+            547445850000000,
+            500000000000000,
+            250000000000000,
+            250000000000000,
+            250000000000000,
+            566533320000000,
+            250000000000000,
+            250000000000000,
+            262500000000000,
+            500000000000000,
+            250000000000000,
+            1166332100000000,
+            250000000000000,
+            750000000000000,
+            750000000000000,
+            262475000000000,
+            3603496857000000,
+            592666660000000,
+            250000000000000,
+            250000000000000,
+            250000000000000,
+            250000000000000,
+            262475000000000,
+            500000000000000,
+            250000000000000,
+            410000000000000,
+            560065099000000,
+            250000000000000,
+            250000000000000,
+            10000000000000000,
+            250000000000000,
+            250000000000000,
+            10000000000000000,
+            5000000000000000,
+            9790000000000000,
+            10000000000000000,
+            10000000000000,
+            10000000000000000,
+            10000000000000000,
+            5830000000000000,
+            8550000000000000,
+            3841259006528675,
+            10000000000000000,
+            10000000000000000,
+            10000000000000000,
+            3766657000000000,
+            8938523570000000,
+            797737774661999,
+            475284694300000,
+            8029997000000000,
+            5328261000000000,
+            831667080000000,
+            2022498989400000,
+            10000000000000000,
+            10000000000000000,
+            10000000000000000,
+            666663989399894,
+            10000000000000000,
+            10000000000000,
+            10000000000000,
+            2350000000000000,
+            10000000000000,
+            5934426930679472,
+            997000000000000,
+        ]
+        final_root = merkle_root_ssz_list(elements, "uint64", 100)
+        self.assertEqual(
+            final_root.hex(),
+            "1b81e0b4a423109d788d9c57f95de87f83def9b7da2101a97562701d8a7ca57a",
+        )
+
     def test_execution_payload_header_merkle(self):
         header = ExecutionPayloadHeader(
             parent_hash=bytes.fromhex(
@@ -546,10 +657,27 @@ class TestBlockchainFunctions(unittest.TestCase):
 
         # verify validator list
         state = load_and_process_state("test/data/state2.json")
+        # elements_roots = [merkle_root_element(v, "Validator") for v in state.validators]
+        # val_list_tree = merkle_list_tree(elements_roots)
+        # index = 51  # Validator index = 51
+        # validator_list_proof = get_proof(val_list_tree, index)
         elements_roots = [merkle_root_element(v, "Validator") for v in state.validators]
-        val_list_tree = merkle_list_tree(elements_roots)
-        index = 51  # Validator index = 51
-        validator_list_proof = get_proof(val_list_tree, index)
+        # Suppose there are 64 actual validators in state.validators.
+
+        validator_list_capacity = VALIDATOR_REGISTRY_LIMIT  # 2^40
+        validator_list_index = 51  # example index
+        validator_list_proof = get_fixed_capacity_proof(
+            elements_roots, validator_list_index, validator_list_capacity
+        )
+        # Now append the “length chunk” (69 validators) at the end:
+        length_chunk = len(elements_roots).to_bytes(
+            32, "little"
+        )  # b'\x45' + b'\x00'*31
+        validator_list_proof.append(length_chunk)
+        leaf = elements_roots[validator_list_index]
+        validators_root = compute_root_from_proof(
+            leaf, validator_list_index, validator_list_proof
+        )
 
         for i in range(0, len(validator_list_proof)):
             # print(f"actual proof: {proof[i + index_all].hex()}")
@@ -560,8 +688,8 @@ class TestBlockchainFunctions(unittest.TestCase):
         index_all_2 += index_all
         index_all = index_all_2
         length_packed = len(elements_roots).to_bytes(32, "little")
-        validators_list_leaf = sha256(val_list_tree[-1][0] + length_packed).digest()
-        print(f"val__list_leaf: {validators_list_leaf.hex()}")
+        # validators_list_leaf = sha256(val_list_tree[-1][0] + length_packed).digest()
+        # print(f"val__list_leaf: {validators_list_leaf.hex()}")
 
         # verify val list leaf in beacon state
         state_fields = [
@@ -584,11 +712,16 @@ class TestBlockchainFunctions(unittest.TestCase):
             # Field (8): latest_execution_payload_header
             state.latest_execution_payload_header.merkle_root(),
             # Field (9): validators
-            validators_list_leaf,
+            validators_root,
             # Field (10): balances
+            # merkle_root_vector(state.balances, "uint64", MAX_VALIDATORS),
             merkle_root_ssz_list(state.balances, "uint64", MAX_VALIDATORS),
+            # merkle_root_ssz_list(state.balances, "uint64", MAX_VALIDATORS),
             # Field (11): randao_mixes
-            merkle_root_vector(
+            # merkle_root_vector(
+            #     state.randao_mixes, "bytes32", EPOCHS_PER_HISTORICAL_VECTOR
+            # ),
+            merkle_root_ssz_list(
                 state.randao_mixes, "bytes32", EPOCHS_PER_HISTORICAL_VECTOR
             ),
             # Field (12): next_withdrawal_index
@@ -612,16 +745,32 @@ class TestBlockchainFunctions(unittest.TestCase):
         num_leaves = 1 << k
         padded = state_fields + [b"\0" * 32] * (num_leaves - n)
 
-        proof_state = get_proof(
-            build_merkle_tree(padded),
-            9,
-        )  # validators at index 9
+        # proof_state = get_proof(
+        #     build_merkle_tree(padded),
+        #     9,
+        # )  # validators at index 9
+        # Berachain treats BeaconState as a Vector of length 32 (i.e., pad 16→32).
+        state_capacity = 32
+        # We want a proof for field index 9 in a 32‐leaf tree
+        proof_state = get_fixed_capacity_proof(
+            state_fields, index=9, capacity=state_capacity
+        )
 
+        leaf = state_fields[9]
+
+        state_root = compute_root_from_proof(leaf, 9, proof_state)
+
+        full_proof = validator_proof + validator_list_proof + proof_state
+        for i in range(0, len(full_proof)):
+            print(full_proof[i].hex())
+        # print(state.balances)
+        # for i in range(0, len(state.randao_mixes)):
+        #     print(state.randao_mixes[i].hex())
         for i in range(0, len(proof_state)):
-            print(f"actual proof: {proof[i + index_all_2 + 34].hex()}")
+            print(f"actual proof: {proof[i + index_all_2].hex()}")
             print(f"gen proof: {proof_state[i].hex()}")
-            # fails here
-            self.assertEqual(proof[i + index_all_2 + 34], proof_state[i])
+            # fails here on second run
+            self.assertEqual(proof[i + index_all_2], proof_state[i])
             index_all += 1
 
         # index = 51  # Assuming validator index 51
