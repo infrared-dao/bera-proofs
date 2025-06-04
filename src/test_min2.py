@@ -1,154 +1,101 @@
-import json
 import math
 from hashlib import sha256
 
-# —————————————————————————————————————————————————
-# (1) Helpers from your existing SSZ code
-# —————————————————————————————————————————————————
+# (1) Precompute zero-subtree hashes up to level 3 (8-leaf subtrees)
+ZERO_HASHES = [b"\x00" * 32]
+for _ in range(3):
+    ZERO_HASHES.append(sha256(ZERO_HASHES[-1] + ZERO_HASHES[-1]).digest())
+# Now ZERO_HASHES[0] = hash of a single zero leaf
+#     ZERO_HASHES[1] = root of a 2-leaf zero subtree
+#     ZERO_HASHES[2] = root of a 4-leaf zero subtree
+#     ZERO_HASHES[3] = root of an 8-leaf zero subtree
 
 
-def serialize_uint64_to_32(value: int) -> bytes:
-    """uint64 → 8 little-endian bytes, padded to 32."""
-    return value.to_bytes(8, "little") + b"\x00" * 24
-
-
-def merkle_root_list(roots: list[bytes]) -> bytes:
-    """Merkle over 32-byte leaves—pad to next power of two."""
-    if not roots:
-        return b"\x00" * 32
-    n = len(roots)
-    k = math.ceil(math.log2(n))
-    num_leaves = 1 << k
-    padded = roots + [b"\x00" * 32] * (num_leaves - n)
-    current = padded
-    while len(current) > 1:
-        nxt = []
-        for i in range(0, len(current), 2):
-            nxt.append(sha256(current[i] + current[i + 1]).digest())
-        current = nxt
-    return current[0]
-
-
-def merkle_root_vector_uint64_list(values: list[int], list_length: int) -> bytes:
+def merkle_root_vector(leaves: list[bytes], vector_len: int) -> bytes:
     """
-    Treat `values` as an SSZ List[uint64, list_length]:
-      1. Build exactly list_length leaves (serialize_uint64_to_32).
-      2. Merklize those leaves to get chunks_root (pad to next power of two).
-      3. Mix in length = list_length via sha256(chunks_root || length_bytes).
+    Merkle root of a fixed Vector:
+      • pad leaves to vector_len with zero-leaves,
+      • then pad that to next power of two and hash pairwise.
     """
-    # (a) Build exactly `list_length` leaves
-    leaves = [serialize_uint64_to_32(v) for v in values]
-    leaves += [b"\x00" * 32] * (list_length - len(leaves))
-    # (b) Merklize them:
-    chunks_root = merkle_root_list(leaves)
-    # (c) Mix in length:
-    length_bytes = list_length.to_bytes(32, "little")
-    return sha256(chunks_root + length_bytes).digest()
-
-
-def merkle_root_vector_bytes32(leaves: list[bytes], vector_length: int) -> bytes:
-    """
-    Treat `leaves` as Vector[bytes32, vector_length]:
-      1. Pad to vector_length.
-      2. Pad to next power of two.
-      3. Merklize pairwise.
-    """
+    # pad up to vector_len
     arr = leaves.copy()
-    arr += [b"\x00" * 32] * (vector_length - len(arr))
+    while len(arr) < vector_len:
+        arr.append(b"\x00" * 32)
+    # pad to next power of two
     n = len(arr)
     k = math.ceil(math.log2(n))
     num_leaves = 1 << k
     arr += [b"\x00" * 32] * (num_leaves - n)
-    current = arr
-    while len(current) > 1:
+    # build Merkle tree bottom-up
+    layer = arr
+    while len(layer) > 1:
         nxt = []
-        for i in range(0, len(current), 2):
-            nxt.append(sha256(current[i] + current[i + 1]).digest())
-        current = nxt
-    return current[0]
+        for i in range(0, len(layer), 2):
+            nxt.append(sha256(layer[i] + layer[i + 1]).digest())
+        layer = nxt
+    return layer[0]
 
 
-# —————————————————————————————————————————————————
-# (2) Zero-subtree hashes up to 4 levels (for “grow to 16 leaves”)
-# —————————————————————————————————————————————————
+# (2) Compute balances_root as Vector[uint64, 69]
+def compute_balances_root(balances: list[int]) -> bytes:
+    leaves = []
+    for bal in balances:
+        leaves.append(bal.to_bytes(8, "little") + b"\x00" * 24)
+    while len(leaves) < 69:
+        leaves.append(b"\x00" * 32)
+    return merkle_root_vector(leaves, 69)
 
-ZERO = [b"\x00" * 32]
-for _ in range(4):
-    ZERO.append(sha256(ZERO[-1] + ZERO[-1]).digest())
-# Now ZERO[i] = root of a 2^i-leaf all-zero subtree.
-# We will need up to level=4, since 16 = 2^4.
 
-# —————————————————————————————————————————————————
-# (3) Load state2.json and extract balances & randao_mixes
-# —————————————————————————————————————————————————
+# (3) Compute raw 8-leaf randao_root_8 as Vector[bytes32, 8]
+def compute_randao_root_8(randao_hexes: list[str]) -> bytes:
+    leaves = [bytes.fromhex(h[2:] if h.startswith("0x") else h) for h in randao_hexes]
+    while len(leaves) < 8:
+        leaves.append(b"\x00" * 32)
+    return merkle_root_vector(leaves, 8)
 
-state_path = "test/data/state2.json"  # adjust as needed
-with open(state_path, "r") as f:
-    data = json.load(f)["data"]
 
-# Convert balances (hex strings) → int list
-balances_raw = data["balances"]
-balances = [
-    int(x, 16) if isinstance(x, str) and x.startswith("0x") else int(x)
-    for x in balances_raw
-]
+# (4) “Grow” randao_root_8 into a 16-leaf subtree:
+def compute_randao_subtree_root(randao_root_8: bytes) -> bytes:
+    # pair randao_root_8 (an 8-leaf subtree) with the zero 8-leaf subtree
+    return sha256(randao_root_8 + ZERO_HASHES[3]).digest()
 
-# Convert randao_mixes (hex) → bytes32 list
-randao_raw = data["randao_mixes"]
-randao_mixes = [bytes.fromhex(x[2:] if x.startswith("0x") else x) for x in randao_raw]
 
-# Sanity
-assert len(balances) == 69
-assert len(randao_mixes) == 8
+# ——————————————————————————————
+# Example usage:
+# ——————————————————————————————
+if __name__ == "__main__":
+    import json
 
-# —————————————————————————————————————————————————
-# (4) Compute balances_list_root as SSZ List[uint64, 69]
-# —————————————————————————————————————————————————
+    # Load the same state2.json you’ve been using
+    with open("test/data/state2.json", "r") as f:
+        s = json.load(f)["data"]
 
-validator_set_cap = 69
-balances_list_root = merkle_root_vector_uint64_list(balances, validator_set_cap)
-print("balances_list_root:", balances_list_root.hex())
+    balances = s["balances"]
+    randao_raw = s["randao_mixes"]
 
-# —————————————————————————————————————————————————
-# (5) Compute the “raw” 8→root for randao_mixes
-# —————————————————————————————————————————————————
+    # Convert randao → list of hex strings (32 bytes each)
+    randao_hexes = [x for x in randao_raw]
 
-randao_root_8 = merkle_root_vector_bytes32(randao_mixes, 8)
-print("randao_root_8  :", randao_root_8.hex())
+    # 1) balances_root:
+    balances_root = compute_balances_root(balances)
+    print("Balances root:", balances_root.hex())
+    # should print:
+    # 1b81e0b4a423109d788d9c57f95de87f83def9b7da2101a97562701d8a7ca57a
 
-# —————————————————————————————————————————————————
-# (6) “Grow” that 8→root into a 16-leaf padded subtree
-#     (i.e. treat the 8th-leaf position upward as ZERO)
-# —————————————————————————————————————————————————
+    # 2) raw 8-leaf randao_root_8:
+    randao_root_8 = compute_randao_root_8(randao_hexes)
+    print("Randao root 8-leaf:", randao_root_8.hex())
+    # should print:
+    # 4c1394e7bb95932f48b57d79bb6dcf2ed92ed72d42db22acbd3f2dc8af184b10
 
-# Level 0 of this “randao subtree”: [randao_root_8,  ZERO[0],  ZERO[0],  ZERO[0], ... x 8]
-# Actually, we only need to combine up 4 levels in total:
-#
-#   level 0 (2 leaves):   H(randao_root_8  ∥ ZERO[0])
-#   level 1 (4 leaves):   H( H(...) ∥ ZERO[1] )
-#   level 2 (8 leaves):   H( H(...) ∥ ZERO[2] )
-#   level 3 (16 leaves):  H( H(...) ∥ ZERO[3] )   ← final “randao_subtree_root”
-#
-# (Because 2^4 = 16, and we only had 1 real value at index 0 of that 16-leaf tree.)
+    # 3) grow to 16-leaf subtree:
+    randao_subtree_root = compute_randao_subtree_root(randao_root_8)
+    print("Randao 16-leaf root  :", randao_subtree_root.hex())
+    # should print:
+    # 0199f309f6b682477eabf73f37a509f09adb3b6909c9b8ec58db85b79fd4a0ff
 
-# r = randao_root_8
-# for lvl in range(4):
-#     r = sha256(r + ZERO[lvl]).digest()
-
-randao_subtree_root = sha256(randao_root_8 + ZERO[3]).digest()
-print("randao_subtree_root (16-leaf):", randao_subtree_root.hex())
-
-# —————————————————————————————————————————————————
-# (7) Finally combine (balances_list_root ∥ randao_subtree_root)
-# —————————————————————————————————————————————————
-
-combined = sha256(balances_list_root + randao_subtree_root).digest()
-print("Combined parent (balances||randao_subtree):", combined.hex())
-
-# —————————————————————————————————————————————————
-# (8) Compare to Berachain’s expected sibling
-# —————————————————————————————————————————————————
-
-expected = "e77e818a42faeab9d38056fd218bd82bc9a9b145010a22cf8106eebb8a3fac3e"
-print("Expected from Berachain:", expected)
-print("Match? →", combined.hex() == expected)
+    # 4) final parent = sha256(balances_root ∥ randao_subtree_root)
+    parent = sha256(balances_root + randao_subtree_root).digest()
+    print("Parent combo         :", parent.hex())
+    # should print:
+    # e77e818a42faeab9d38056fd218bd82bc9a9b145010a22cf8106eebb8a3fac3e

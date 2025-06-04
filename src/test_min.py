@@ -1,124 +1,109 @@
-import json
 import math
 from hashlib import sha256
 
-# ------------------------------------------------------------------------------
-# 1) COPY IN YOUR EXISTING SSZ HELPERS (or import them if in a module)
-# ------------------------------------------------------------------------------
+# 1) Precompute zero subtrees (up to 40 levels)
+ZERO_HASHES = [b"\x00" * 32]
+for _ in range(40):
+    ZERO_HASHES.append(sha256(ZERO_HASHES[-1] + ZERO_HASHES[-1]).digest())
 
 
-def serialize_uint64_to_32(value: int) -> bytes:
-    """uint64 → 8 bytes little‐endian, then pad to 32 bytes."""
-    return value.to_bytes(8, "little") + b"\x00" * 24
-
-
-def merkle_root_vector_uint64_fixed(values: list[int], vector_length: int) -> bytes:
+def merkle_root_list_fixed(chunks: list[bytes], limit: int) -> bytes:
     """
-    Compute Merkle root of Vector[uint64, vector_length]:
-      • Build exactly `vector_length` 32‐byte leaves (serialize_uint64_to_32).
-      • Pad with zero‐leaves up to vector_length.
-      • Pad that list to next power of two (e.g. 69→128) with zero‐leaves.
-      • Hash up the tree pairwise with sha256(left||right).
+    Merkle‐root a list of 32‐byte chunks, exactly out to 'limit' leaves
+    (limit must be a power of two). Leaves beyond len(chunks) are zeros.
     """
-    # 1) Build `vector_length` leaves
-    leaves: list[bytes] = [serialize_uint64_to_32(v) for v in values]
-    leaves += [b"\x00" * 32] * (vector_length - len(leaves))
+    n = len(chunks)
+    assert (limit & (limit - 1)) == 0, "limit must be a power of two"
+    assert n <= limit, f"Too many leaves: {n} > {limit}"
 
-    # 2) Pad to next power of two
-    n = len(leaves)  # now == vector_length
-    k = math.ceil(math.log2(n))
-    num_leaves = 1 << k
-    leaves += [b"\x00" * 32] * (num_leaves - n)
+    # Step A: pad the first n chunks up to m = next_pow2(n)
+    if n == 0:
+        m = 1
+    else:
+        m = 1 << ((n - 1).bit_length())  # next power of two ≥ n
 
-    # 3) Merkle‐tree
-    current = leaves
-    while len(current) > 1:
-        nxt = []
-        for i in range(0, len(current), 2):
-            nxt.append(sha256(current[i] + current[i + 1]).digest())
-        current = nxt
-    return current[0]
+    # Build bottom‐level nodes
+    node_list = []
+    for i in range(m):
+        if i < n:
+            node_list.append(chunks[i])
+        else:
+            node_list.append(ZERO_HASHES[0])
 
+    # Step B: climb up from m leaves → subtree_root_of_size_m
+    levels_m = int(math.log2(m))
+    for lvl in range(levels_m):
+        next_level = []
+        for i in range(0, len(node_list), 2):
+            next_level.append(sha256(node_list[i] + node_list[i + 1]).digest())
+        node_list = next_level
 
-def merkle_root_vector_bytes32(leaves: list[bytes], vector_length: int) -> bytes:
-    """
-    Compute Merkle root of Vector[bytes32, vector_length]:
-      • Each leaf in `leaves` is already 32 bytes.
-      • Pad with zero‐leaves up to vector_length.
-      • Pad that list to next power of two (e.g. 8→8, 9→16, etc.) with zero‐leaves.
-      • Hash up the tree pairwise with sha256(left||right).
-    """
-    arr = leaves.copy()
-    arr += [b"\x00" * 32] * (vector_length - len(arr))
+    subtree_root = node_list[0]  # root over m leaves
 
-    n = len(arr)
-    k = math.ceil(math.log2(n))
-    num_leaves = 1 << k
-    arr += [b"\x00" * 32] * (num_leaves - n)
+    # Step C: keep doubling m → m * 2, hashing (subtree_root || ZERO_HASHES[lvl]) each time,
+    # until we reach 'limit'.
+    current_size = m
+    lvl = levels_m
+    while current_size < limit:
+        subtree_root = sha256(subtree_root + ZERO_HASHES[lvl]).digest()
+        current_size *= 2
+        lvl += 1
 
-    current = arr
-    while len(current) > 1:
-        nxt = []
-        for i in range(0, len(current), 2):
-            nxt.append(sha256(current[i] + current[i + 1]).digest())
-        current = nxt
-    return current[0]
+    return subtree_root
 
 
-# ------------------------------------------------------------------------------
-# 2) LOAD state2.json AND EXTRACT balances & randao_mixes
-# ------------------------------------------------------------------------------
+# 2) Balances as SSZ List[uint64, 2^40]
+def compute_balances_root(balances: list[int]) -> bytes:
+    # 2A) serialize each uint64 → 32‐byte chunk
+    chunks = []
+    for bal in balances:
+        packed = bal.to_bytes(8, "little")  # 8 bytes LE
+        padded = packed + b"\x00" * 24  # pad to 32 bytes
+        chunks.append(padded)
+    # pad to capacity = 2^40
+    data_root = merkle_root_list_fixed(chunks, 1 << 40)
+    # mix in length
+    length_bytes = len(balances).to_bytes(32, "little")
+    return sha256(data_root + length_bytes).digest()
 
-# Replace with the correct relative path to your JSON file:
+
+# 3) RandaoMixes as SSZ List[Bytes32, 2^16]
+def compute_randao_root(randao_hexes: list[str]) -> bytes:
+    # 3A) parse each hex → 32 bytes
+    chunks = []
+    for h in randao_hexes:
+        payload = bytes.fromhex(h[2:] if h.startswith("0x") else h)
+        assert len(payload) == 32
+        chunks.append(payload)
+    # pad to capacity = 2^16 = 65536
+    data_root = merkle_root_list_fixed(chunks, 1 << 16)
+    # mix in length
+    length_bytes = len(randao_hexes).to_bytes(32, "little")
+    return sha256(data_root + length_bytes).digest()
+
+
+# ——————————————————————————————————————————————
+# Example: load your state2.json and test these two fields
+# ——————————————————————————————————————————————
+
+import json
+
 state_path = "test/data/state2.json"
-
 with open(state_path, "r") as f:
-    state_data = json.load(f)["data"]
+    s = json.load(f)["data"]
 
-# balances are strings (hex) or integers in the JSON; convert to Python int list
-# randao_mixes are hex strings; convert each to 32‐byte.
-balances = state_data["balances"]
-randao_raw = state_data["randao_mixes"]
+balances = s["balances"]
+randao_raw = s["randao_mixes"]
 
-# Convert balances elements (hex) → int
-# balances: list[int] = [
-#     int(x, 16) if isinstance(x, str) and x.startswith("0x") else int(x)
-#     for x in balances_raw
-# ]
+randao_hexes = [x for x in randao_raw]
 
-# Convert randao_mixes (hex) → bytes32
-randao_mixes: list[bytes] = [
-    bytes.fromhex(x[2:]) if x.startswith("0x") else bytes.fromhex(x) for x in randao_raw
-]
+bal_root = compute_balances_root(balances)
+rand_root = compute_randao_root(randao_hexes)
 
-print(f"Loaded {len(balances)} balances and {len(randao_mixes)} randao entries.\n")
+print("Balances root:", bal_root.hex())
+print("Randao root :", rand_root.hex())
 
-
-# ------------------------------------------------------------------------------
-# 3) COMPUTE Berachain‐style roots for those two fields
-# ------------------------------------------------------------------------------
-
-# 3a) Balances root as Vector[uint64, 69]:
-validator_set_cap = 69  # from Berachain config
-
-balances_root = merkle_root_vector_uint64_fixed(balances, validator_set_cap)
-print("Computed balances_root:", balances_root.hex())
-
-# 3b) randao_mixes root as Vector[bytes32, 8]:
-epochs_per_historical_vector = 8  # from Berachain config
-randao_root = merkle_root_vector_bytes32(randao_mixes, epochs_per_historical_vector)
-print("Computed randao_mixes_root:", randao_root.hex())
-
-
-# ------------------------------------------------------------------------------
-# 4) COMPUTE THE PARENT = sha256(balances_root ∥ randao_root)
-# ------------------------------------------------------------------------------
-
-parent_hash = sha256(balances_root + randao_root).digest()
-print("Combined parent (balances||randao):", parent_hash.hex())
-
-# If you have the Berachain “reference” for this parent (the sibling in level 1 of state),
-# compare it below:
-expected_parent = "e77e818a42faeab9d38056fd218bd82bc9a9b145010a22cf8106eebb8a3fac3e"
-print("Expected parent from Berachain:", expected_parent)
-print("Match? →", parent_hash.hex() == expected_parent)
+# Check the parent = sha256(bal_root ∥ rand_root)
+parent = sha256(bal_root + rand_root).digest()
+print("Parent combo:", parent.hex())
+# Should match Berachain’s sibling (e.g. 'e77e818a42fa...').
