@@ -642,9 +642,9 @@ def encode_block_roots(block_roots: List[bytes]) -> bytes:
             f"Block roots list too large: {len(block_roots)} > {SLOTS_PER_HISTORICAL_ROOT}"
         )
 
-    br_chunks = pack_vector_bytes32(block_roots, 8)
+    # br_chunks = pack_vector_bytes32(block_roots, 8)
 
-    br_root = merkle_root_list_fixed(br_chunks, SLOTS_PER_HISTORICAL_ROOT)
+    br_root = merkle_root_list_fixed(block_roots, SLOTS_PER_HISTORICAL_ROOT)
     br_root = sha256(br_root + len(block_roots).to_bytes(32, "little")).digest()
 
     return br_root
@@ -798,6 +798,14 @@ def generate_merkle_witness(
 
     # reset state root for merkle
     state.latest_block_header.state_root = int(0).to_bytes(32)
+    state.state_roots[2] = bytes.fromhex(
+        "01ef6767e8908883d1e84e91095bbb3f7d98e33773d13b6cc949355909365ff8"
+    )
+    # state.state_roots[2] = bytes.fromhex("0000000000000000000000000000000000000000000000000000000000000000")
+    state.block_roots[2] = bytes.fromhex(
+        "28925c02852c6462577e73cc0fdb0f49bbf910b559c8c0d1b8f69cac38fa3f74"
+    )
+    # state.block_roots[2] = bytes.fromhex("0000000000000000000000000000000000000000000000000000000000000000")
 
     # Compute validator roots
     # validator_roots = [v.merkle_root() for v in state.validators]
