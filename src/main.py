@@ -8,7 +8,7 @@ by both CLI and API interfaces. Supports validator, balance, and proposer proofs
 import math
 from typing import List, Tuple, Optional, Dict, Any
 from dataclasses import dataclass
-from ssz import (
+from .ssz import (
     # Constants
     VALIDATOR_REGISTRY_LIMIT,
     SLOTS_PER_HISTORICAL_ROOT,
@@ -300,7 +300,7 @@ def _generate_state_proof(
     k = math.ceil(math.log2(max(n, 1)))
     num_leaves = 1 << k
     padded = state_fields + [b"\0" * 32] * (num_leaves - n)
-    
+
     # Build state tree and get proof
     state_tree = build_merkle_tree(padded)
     return get_proof(state_tree, field_index)

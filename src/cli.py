@@ -112,9 +112,8 @@ def validator(validator_index: int, json_file: str = None, slot: int = None):
     """
     try:
         if json_file:
-            # Load from local JSON file
-            state = load_and_process_state(json_file)
-            result = generate_validator_proof(state, validator_index)
+            # Use local JSON file directly
+            result = generate_validator_proof(json_file, validator_index)
             
             # Format for JSON output
             output = {
@@ -130,37 +129,29 @@ def validator(validator_index: int, json_file: str = None, slot: int = None):
             beacon_client = BeaconAPIClient()
             slot_id = slot if slot is not None else "head"
             
-            # Get state data
+            # Get state data and save to temp file
             state_response = beacon_client.get_state(slot_id)
             
-            # Save to temp file and load
-            with open("temp_state.json", "w") as f:
+            temp_file = "temp_state.json"
+            with open(temp_file, "w") as f:
                 json.dump(state_response["data"], f)
             
-            state = load_and_process_state("temp_state.json")
-            
-            # Get previous cycle data
             try:
-                prev_slot = max(0, state.slot - 64)
-                prev_state = beacon_client.get_state(prev_slot)
-                prev_block = beacon_client.get_block(prev_slot)
-                prev_state_root = bytes.fromhex(prev_state["data"]["root"][2:])
-                prev_block_root = bytes.fromhex(prev_block["data"]["root"][2:])
-            except:
-                prev_state_root = None
-                prev_block_root = None
-            
-            result = generate_validator_proof(state, validator_index, prev_state_root, prev_block_root)
-            
-            # Format for JSON output
-            output = {
-                "proof": [f"0x{step.hex()}" for step in result.proof],
-                "root": f"0x{result.root.hex()}",
-                "metadata": {
-                    **result.metadata,
-                    "type": "validator_proof"
+                result = generate_validator_proof(temp_file, validator_index)
+                
+                # Format for JSON output
+                output = {
+                    "proof": [f"0x{step.hex()}" for step in result.proof],
+                    "root": f"0x{result.root.hex()}",
+                    "metadata": {
+                        **result.metadata,
+                        "type": "validator_proof"
+                    }
                 }
-            }
+            finally:
+                # Clean up temp file
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
         
         print(format_proof_result(output))
         
@@ -181,9 +172,8 @@ def balance(validator_index: int, json_file: str = None, slot: int = None):
     """
     try:
         if json_file:
-            # Load from local JSON file
-            state = load_and_process_state(json_file)
-            result = generate_balance_proof(state, validator_index)
+            # Use local JSON file directly
+            result = generate_balance_proof(json_file, validator_index)
             
             # Format for JSON output
             output = {
@@ -199,37 +189,29 @@ def balance(validator_index: int, json_file: str = None, slot: int = None):
             beacon_client = BeaconAPIClient()
             slot_id = slot if slot is not None else "head"
             
-            # Get state data
+            # Get state data and save to temp file
             state_response = beacon_client.get_state(slot_id)
             
-            # Save to temp file and load
-            with open("temp_state.json", "w") as f:
+            temp_file = "temp_state.json"
+            with open(temp_file, "w") as f:
                 json.dump(state_response["data"], f)
             
-            state = load_and_process_state("temp_state.json")
-            
-            # Get previous cycle data
             try:
-                prev_slot = max(0, state.slot - 64)
-                prev_state = beacon_client.get_state(prev_slot)
-                prev_block = beacon_client.get_block(prev_slot)
-                prev_state_root = bytes.fromhex(prev_state["data"]["root"][2:])
-                prev_block_root = bytes.fromhex(prev_block["data"]["root"][2:])
-            except:
-                prev_state_root = None
-                prev_block_root = None
-            
-            result = generate_balance_proof(state, validator_index, prev_state_root, prev_block_root)
-            
-            # Format for JSON output
-            output = {
-                "proof": [f"0x{step.hex()}" for step in result.proof],
-                "root": f"0x{result.root.hex()}",
-                "metadata": {
-                    **result.metadata,
-                    "type": "balance_proof"
+                result = generate_balance_proof(temp_file, validator_index)
+                
+                # Format for JSON output
+                output = {
+                    "proof": [f"0x{step.hex()}" for step in result.proof],
+                    "root": f"0x{result.root.hex()}",
+                    "metadata": {
+                        **result.metadata,
+                        "type": "balance_proof"
+                    }
                 }
-            }
+            finally:
+                # Clean up temp file
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
         
         print(format_proof_result(output))
         
@@ -250,9 +232,8 @@ def proposer(validator_index: int, json_file: str = None, slot: int = None):
     """
     try:
         if json_file:
-            # Load from local JSON file
-            state = load_and_process_state(json_file)
-            result = generate_proposer_proof(state, validator_index)
+            # Use local JSON file directly
+            result = generate_proposer_proof(json_file, validator_index)
             
             # Format for JSON output
             output = {
@@ -268,37 +249,29 @@ def proposer(validator_index: int, json_file: str = None, slot: int = None):
             beacon_client = BeaconAPIClient()
             slot_id = slot if slot is not None else "head"
             
-            # Get state data
+            # Get state data and save to temp file
             state_response = beacon_client.get_state(slot_id)
             
-            # Save to temp file and load
-            with open("temp_state.json", "w") as f:
+            temp_file = "temp_state.json"
+            with open(temp_file, "w") as f:
                 json.dump(state_response["data"], f)
             
-            state = load_and_process_state("temp_state.json")
-            
-            # Get previous cycle data
             try:
-                prev_slot = max(0, state.slot - 64)
-                prev_state = beacon_client.get_state(prev_slot)
-                prev_block = beacon_client.get_block(prev_slot)
-                prev_state_root = bytes.fromhex(prev_state["data"]["root"][2:])
-                prev_block_root = bytes.fromhex(prev_block["data"]["root"][2:])
-            except:
-                prev_state_root = None
-                prev_block_root = None
-            
-            result = generate_proposer_proof(state, validator_index, prev_state_root, prev_block_root)
-            
-            # Format for JSON output
-            output = {
-                "proof": [f"0x{step.hex()}" for step in result.proof],
-                "root": f"0x{result.root.hex()}",
-                "metadata": {
-                    **result.metadata,
-                    "type": "proposer_proof"
+                result = generate_proposer_proof(temp_file, validator_index)
+                
+                # Format for JSON output
+                output = {
+                    "proof": [f"0x{step.hex()}" for step in result.proof],
+                    "root": f"0x{result.root.hex()}",
+                    "metadata": {
+                        **result.metadata,
+                        "type": "proposer_proof"
+                    }
                 }
-            }
+            finally:
+                # Clean up temp file
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
         
         print(format_proof_result(output))
         

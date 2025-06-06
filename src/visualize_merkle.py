@@ -13,7 +13,7 @@ from typing import List, Optional
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(__file__))
 
-from main import generate_merkle_witness
+from .main import generate_merkle_witness
 
 def print_tree_ascii(proof_steps: List[bytes], validator_index: int, state_root: bytes):
     """
