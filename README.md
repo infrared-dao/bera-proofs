@@ -41,6 +41,77 @@ poetry run python src/main.py
 python3 src/main.py
 ```
 
+## 🌐 REST API Server
+
+Bera Proofs includes a REST API server for generating Merkle proofs via HTTP endpoints.
+
+### Starting the API Server
+
+```bash
+# Start server on localhost:8000
+poetry run python -m src.cli serve
+
+# Custom host and port
+poetry run python -m src.cli serve --host 0.0.0.0 --port 8080
+```
+
+### API Endpoints
+
+#### **Health Check**
+```bash
+GET /health
+```
+
+#### **Proof Generation**
+All proof endpoints return the same JSON structure with proof steps, root hash, and metadata.
+
+```bash
+# Generate validator proof
+GET /proofs/validator/{validator_index}?slot=head&json_file=path/to/state.json
+
+# Generate balance proof  
+GET /proofs/balance/{validator_index}?slot=head&json_file=path/to/state.json
+
+# Generate proposer proof
+GET /proofs/proposer/{validator_index}?slot=head&json_file=path/to/state.json
+```
+
+**Response Format:**
+```json
+{
+  "proof": ["0x...", "0x...", ...],
+  "root": "0xe0aaed9422b2e3fa8c56a0114289ef05155e1ace9faa970c8c9bfc9fb46f97e0",
+  "validator_index": 0,
+  "slot": "head", 
+  "proof_type": "validator|balance|proposer",
+  "metadata": { "proof_length": 45, "..." }
+}
+```
+
+### Configuration
+
+Configure via `.env` file:
+```bash
+BEACON_RPC_URL=http://35.246.217.85:3500
+API_HOST=0.0.0.0
+API_PORT=8000
+```
+
+## 🖥️ Command Line Interface
+
+```bash
+# Generate proofs (returns JSON)
+poetry run python -m src.cli validator 0 --json-file test/data/state.json
+poetry run python -m src.cli balance 0 --json-file test/data/state.json  
+poetry run python -m src.cli proposer 0 --json-file test/data/state.json
+
+# Inspect beacon state
+poetry run python -m src.cli inspect test/data/state.json
+
+# Start API server
+poetry run python -m src.cli serve
+```
+
 ## 🌳 Merkle Tree Visualization
 
 The library includes powerful visualization tools to help understand the proof structure and tree navigation.
@@ -56,7 +127,6 @@ This comprehensive visualization includes:
 - **Proof Structure Analysis**: Breakdown of validator navigation, BeaconState fields, and root computation
 - **ETH2 vs Berachain Comparison**: Side-by-side comparison of implementation differences
 - **Interactive Examples**: Demonstrations with different validator indices
-
 
 ## 🔍 Berachain BeaconState Differences
 

@@ -1,12 +1,13 @@
 """
 Refactored Main Module
 
-This module provides the same functionality as main.py but uses the modular
-SSZ library structure for better organization and maintainability.
+This module provides flexible proof generation functions that can be used
+by both CLI and API interfaces. Supports validator, balance, and proposer proofs.
 """
 
 import math
-from typing import List, Tuple
+from typing import List, Tuple, Optional, Dict, Any
+from dataclasses import dataclass
 from ssz import (
     # Constants
     VALIDATOR_REGISTRY_LIMIT,
@@ -35,61 +36,230 @@ from ssz import (
     BeaconState,
     load_and_process_state,
 )
+import json
 
 
-def generate_merkle_witness(
-    state_file: str, validator_index: int
-) -> tuple[List[bytes], bytes]:
-    # Load state as BeaconState instance
+@dataclass
+class ProofResult:
+    """Container for proof generation results."""
+    proof: List[bytes]
+    root: bytes
+    metadata: Dict[str, Any]
+
+
+def generate_validator_proof(state_file: str, validator_index: int, 
+                           prev_state_root: Optional[str] = None, 
+                           prev_block_root: Optional[str] = None) -> Dict[str, Any]:
+    """Generate a Merkle proof for a validator."""
     state = load_and_process_state(state_file)
-
-    # reset state root for merkle
+    
+    # Use existing values from position 2 if not provided
+    if prev_state_root is None:
+        prev_state_root = state.state_roots[2]
+    if prev_block_root is None:
+        prev_block_root = state.block_roots[2]
+    
+    # Validate validator index
+    if validator_index >= len(state.validators):
+        raise ValueError(f"Validator index {validator_index} out of range (max: {len(state.validators)-1})")
+    
+    # Prepare state for merkleization (reset state root as in original code)
     state.latest_block_header.state_root = int(0).to_bytes(32)
-    state.state_roots[2] = bytes.fromhex(
-        "01ef6767e8908883d1e84e91095bbb3f7d98e33773d13b6cc949355909365ff8"
+    
+    # Generate validator proof within the validators list
+    validator_elements = [merkle_root_element(v, "Validator") for v in state.validators]
+    val_proof = get_fixed_capacity_proof(
+        validator_elements, 
+        validator_index, 
+        VALIDATOR_REGISTRY_LIMIT
     )
-    # state.state_roots[2] = bytes.fromhex("0000000000000000000000000000000000000000000000000000000000000000")
-    state.block_roots[2] = bytes.fromhex(
-        "28925c02852c6462577e73cc0fdb0f49bbf910b559c8c0d1b8f69cac38fa3f74"
+    
+    # Add length mixing for the validators list
+    length_chunk = len(validator_elements).to_bytes(32, "little")
+    val_proof.append(length_chunk)
+    
+    # Generate state proof for the validators field (field index 9)
+    state_proof = _generate_state_proof(state, field_index=9, prev_state_root=prev_state_root, prev_block_root=prev_block_root)
+    
+    # Combine proofs
+    full_proof = val_proof + state_proof
+    
+    # Get state root
+    state_root = _compute_state_root(state)
+    
+    metadata = {
+        "proof_length": len(full_proof),
+        "validator_count": len(state.validators),
+        "validator_pubkey": state.validators[validator_index].pubkey.hex(),
+        "slot": state.slot,
+        "field_index": 9  # validators field
+    }
+    
+    return ProofResult(full_proof, state_root, metadata)
+
+
+def generate_balance_proof(state_file: str, validator_index: int,
+                         prev_state_root: Optional[str] = None,
+                         prev_block_root: Optional[str] = None) -> Dict[str, Any]:
+    """Generate a Merkle proof for a validator balance."""
+    state = load_and_process_state(state_file)
+    
+    # Use existing values from position 2 if not provided
+    if prev_state_root is None:
+        prev_state_root = state.state_roots[2]
+    if prev_block_root is None:
+        prev_block_root = state.block_roots[2]
+    
+    # Validate validator index
+    if validator_index >= len(state.balances):
+        raise ValueError(f"Balance index {validator_index} out of range (max: {len(state.balances)-1})")
+    
+    # Prepare state for merkleization
+    state.latest_block_header.state_root = int(0).to_bytes(32)
+    
+    # Generate balance proof within the balances list
+    balance_elements = [merkle_root_basic(balance, "uint64") for balance in state.balances]
+    bal_proof = get_fixed_capacity_proof(
+        balance_elements,
+        validator_index,
+        VALIDATOR_REGISTRY_LIMIT  # Same capacity as validators
     )
-    # state.block_roots[2] = bytes.fromhex("0000000000000000000000000000000000000000000000000000000000000000")
+    
+    # Add length mixing for the balances list
+    length_chunk = len(balance_elements).to_bytes(32, "little")
+    bal_proof.append(length_chunk)
+    
+    # Generate state proof for the balances field (field index 10)
+    state_proof = _generate_state_proof(state, field_index=10, prev_state_root=prev_state_root, prev_block_root=prev_block_root)
+    
+    # Combine proofs
+    full_proof = bal_proof + state_proof
+    
+    # Get state root
+    state_root = _compute_state_root(state)
+    
+    metadata = {
+        "proof_length": len(full_proof),
+        "balance": str(state.balances[validator_index]),
+        "validator_count": len(state.validators),
+        "slot": state.slot,
+        "field_index": 10  # balances field
+    }
+    
+    return ProofResult(full_proof, state_root, metadata)
 
-    # Compute validator roots
-    # validator_roots = [v.merkle_root() for v in state.validators]
-    # validators_tree = build_merkle_tree(validator_roots)
-    # validators_root = validators_tree[-1][0]
-    validators_root = merkle_root_ssz_list(
-        state.validators, "Validator", VALIDATOR_REGISTRY_LIMIT
+
+def generate_proposer_proof(state_file: str, validator_index: int,
+                          prev_state_root: Optional[str] = None,
+                          prev_block_root: Optional[str] = None) -> Dict[str, Any]:
+    """Generate a Merkle proof for a proposer."""
+    state = load_and_process_state(state_file)
+    
+    # Use existing values from position 2 if not provided
+    if prev_state_root is None:
+        prev_state_root = state.state_roots[2]
+    if prev_block_root is None:
+        prev_block_root = state.block_roots[2]
+    
+    # Validate validator index
+    if validator_index >= len(state.validators):
+        raise ValueError(f"Validator index {validator_index} out of range (max: {len(state.validators)-1})")
+    
+    # Prepare state for merkleization
+    state.latest_block_header.state_root = int(0).to_bytes(32)
+    
+    # Generate pubkey proof within the validator (field index 0)
+    validator = state.validators[validator_index]
+    validator_field_roots = [
+        merkle_root_basic(validator.pubkey, "bytes48"),  # field 0
+        merkle_root_basic(validator.withdrawal_credentials, "bytes32"),  # field 1
+        merkle_root_basic(validator.effective_balance, "uint64"),  # field 2
+        merkle_root_basic(validator.slashed, "Boolean"),  # field 3
+        merkle_root_basic(validator.activation_eligibility_epoch, "uint64"),  # field 4
+        merkle_root_basic(validator.activation_epoch, "uint64"),  # field 5
+        merkle_root_basic(validator.exit_epoch, "uint64"),  # field 6
+        merkle_root_basic(validator.withdrawable_epoch, "uint64"),  # field 7
+    ]
+    
+    # Pad validator fields to next power of 2 and build tree
+    n = len(validator_field_roots)
+    k = math.ceil(math.log2(max(n, 1)))
+    num_leaves = 1 << k
+    padded_fields = validator_field_roots + [b"\0" * 32] * (num_leaves - n)
+    validator_tree = build_merkle_tree(padded_fields)
+    pubkey_proof = get_proof(validator_tree, 0)  # pubkey at index 0
+    
+    # Generate validator proof within the validators list
+    validator_elements = [merkle_root_element(v, "Validator") for v in state.validators]
+    val_proof = get_fixed_capacity_proof(
+        validator_elements,
+        validator_index,
+        VALIDATOR_REGISTRY_LIMIT
     )
-    validators_tree = merkle_list_tree([v.merkle_root() for v in state.validators])
-    print(validators_root.hex())
+    
+    # Add length mixing
+    length_chunk = len(validator_elements).to_bytes(32, "little")
+    val_proof.append(length_chunk)
+    
+    # Generate state proof for validators field (field index 9)
+    state_proof = _generate_state_proof(state, field_index=9, prev_state_root=prev_state_root, prev_block_root=prev_block_root)
+    
+    # Generate header proof for state_root field (field index 3 in BeaconBlockHeader)
+    header_field_roots = [
+        merkle_root_basic(state.latest_block_header.slot, "uint64"),  # field 0
+        merkle_root_basic(state.latest_block_header.proposer_index, "uint64"),  # field 1
+        merkle_root_basic(state.latest_block_header.parent_root, "bytes32"),  # field 2
+        merkle_root_basic(state.latest_block_header.state_root, "bytes32"),  # field 3
+        merkle_root_basic(state.latest_block_header.body_root, "bytes32"),  # field 4
+    ]
+    
+    # Pad header fields and build tree
+    n = len(header_field_roots)
+    k = math.ceil(math.log2(max(n, 1)))
+    num_leaves = 1 << k
+    padded_header_fields = header_field_roots + [b"\0" * 32] * (num_leaves - n)
+    header_tree = build_merkle_tree(padded_header_fields)
+    header_proof = get_proof(header_tree, 3)  # state_root at index 3
+    
+    # Combine all proofs
+    full_proof = pubkey_proof + val_proof + state_proof + header_proof
+    
+    # Return latest_block_header root for proposer proofs
+    header_root = header_tree[-1][0]
+    
+    metadata = {
+        "proof_length": len(full_proof),
+        "validator_count": len(state.validators), 
+        "pubkey": validator.pubkey.hex(),
+        "slot": state.slot,
+        "pubkey_proof_length": len(pubkey_proof),
+        "validator_proof_length": len(val_proof),
+        "state_proof_length": len(state_proof),
+        "header_proof_length": len(header_proof)
+    }
+    
+    return ProofResult(full_proof, header_root, metadata)
 
-    elements_roots = [merkle_root_element(v, "Validator") for v in state.validators]
 
-    # Berachain treats the validator registry as exactly Vector[Validator, 2^40].
-    validator_capacity = VALIDATOR_REGISTRY_LIMIT  # 2^40
-
-    # We need a proof for index 51 in a 2^40‐sized tree,
-    # where only the first len(elements_roots) leaves are "real" and the rest are zeros.
-    validator_list_proof = get_fixed_capacity_proof(
-        elements_roots, index=validator_index, capacity=validator_capacity
-    )
-    length_chunk = len(elements_roots).to_bytes(32, "little")  # b'\x45' + b'\x00'*31
-    validator_list_proof.append(length_chunk)
-
-    leaf = elements_roots[validator_index]
-
-    validators_root = compute_root_from_proof(
-        leaf, validator_index, validator_list_proof
-    )
-    # validators_root = sha256(validators_root + length_chunk).digest()
-
-    # Compute state root
-    # state_root = state.merkle_root()
-
-    # Generate proofs
-    # proof_list = get_proof(validators_tree, validator_index)
-
+def _generate_state_proof(
+    state: BeaconState, 
+    field_index: int, 
+    prev_state_root: bytes, 
+    prev_block_root: bytes
+) -> List[bytes]:
+    """
+    Generate proof for a field within BeaconState.
+    
+    Args:
+        state: BeaconState instance
+        field_index: Index of the field to prove (9 for validators, 10 for balances)
+        prev_state_root: Previous cycle state root
+        prev_block_root: Previous cycle block root
+        
+    Returns:
+        List of proof steps for the state field
+    """
+    # Build state field roots
     state_fields = [
         # Field (0): genesis_validators_root
         merkle_root_basic(state.genesis_validators_root, "bytes32"),
@@ -100,10 +270,8 @@ def generate_merkle_witness(
         # Field (3): latest_block_header
         state.latest_block_header.merkle_root(),
         # Field (4): block_roots
-        # merkle_root_vector(state.block_roots, "bytes32", SLOTS_PER_HISTORICAL_ROOT),
         encode_block_roots(state.block_roots),
         # Field (5): state_roots
-        # merkle_root_vector(state.state_roots, "bytes32", SLOTS_PER_HISTORICAL_ROOT),
         encode_block_roots(state.state_roots),
         # Field (6): eth1_data
         state.eth1_data.merkle_root(),
@@ -112,56 +280,73 @@ def generate_merkle_witness(
         # Field (8): latest_execution_payload_header
         state.latest_execution_payload_header.merkle_root(),
         # Field (9): validators
-        validators_root,
+        _encode_validators_field(state.validators),
         # Field (10): balances
-        # merkle_root_vector(state.balances, "uint64", MAX_VALIDATORS),
-        # merkle_root_ssz_list(state.balances, "uint64", MAX_VALIDATORS),
         encode_balances(state.balances),
-        # merkle_root_ssz_list(state.balances, "uint64", VALIDATOR_REGISTRY_LIMIT),
         # Field (11): randao_mixes
-        # merkle_root_vector(state.randao_mixes, "bytes32", EPOCHS_PER_HISTORICAL_VECTOR),
-        # merkle_root_ssz_list(
-        #     state.randao_mixes, "bytes32", EPOCHS_PER_HISTORICAL_VECTOR
-        # ),
         encode_randao_mixes(state.randao_mixes),
         # Field (12): next_withdrawal_index
         merkle_root_basic(state.next_withdrawal_index, "uint64"),
         # Field (13): next_withdrawal_validator_index
         merkle_root_basic(state.next_withdrawal_validator_index, "uint64"),
         # Field (14): slashings
-        # merkle_root_vector(state.slashings, "uint64", EPOCHS_PER_SLASHINGS_VECTOR),
         encode_slashings(state.slashings),
         # Field (15): total_slashing
         merkle_root_basic(state.total_slashing, "uint64"),
     ]
+    
     # Pad to next power of two
     n = len(state_fields)
     k = math.ceil(math.log2(max(n, 1)))
     num_leaves = 1 << k
     padded = state_fields + [b"\0" * 32] * (num_leaves - n)
-
+    
+    # Build state tree and get proof
     state_tree = build_merkle_tree(padded)
+    return get_proof(state_tree, field_index)
 
-    proof_state = get_proof(
-        state_tree,
-        9,
-    )  # validators at index 9
 
-    # # Berachain treats BeaconState as a Vector of length 32 (i.e., pad 16→32).
-    # state_capacity = 32
-    # # We want a proof for field index 9 in a 32‐leaf tree
-    # proof_state = get_fixed_capacity_proof(
-    #     state_fields, index=9, capacity=state_capacity
-    # )
+def _encode_validators_field(validators) -> bytes:
+    """Encode validators field for merkleization."""
+    validator_elements = [merkle_root_element(v, "Validator") for v in validators]
+    validators_root = merkle_root_ssz_list(validators, "Validator", VALIDATOR_REGISTRY_LIMIT)
+    return validators_root
 
-    leaf = state_fields[9]
 
-    # state_root = compute_root_from_proof(leaf, 9, proof_state)
-    state_root = state_tree[-1][0]
+def _compute_state_root(state: BeaconState) -> bytes:
+    """Compute the BeaconState merkle root."""
+    return state.merkle_root()
 
-    # Combine proofs
-    full_proof = validator_list_proof + proof_state
-    return full_proof, state_root
+
+# Legacy function for backwards compatibility
+def generate_merkle_witness(
+    state_file: str, validator_index: int
+) -> tuple[List[bytes], bytes]:
+    """
+    Legacy function for backwards compatibility.
+    
+    Args:
+        state_file: Path to JSON state file
+        validator_index: Index of validator to prove
+        
+    Returns:
+        Tuple of (proof_list, state_root)
+    """
+    state = load_and_process_state(state_file)
+    
+    # Use the existing values from the JSON at position 2 instead of hardcoded values
+    prev_state_root = state.state_roots[2]  # Use existing value from JSON
+    prev_block_root = state.block_roots[2]   # Use existing value from JSON
+    
+    print(f"Using existing state_roots[2]: {prev_state_root.hex()}")
+    print(f"Using existing block_roots[2]: {prev_block_root.hex()}")
+    
+    # Don't override them since we're using the existing values
+    # state.state_roots[2] = prev_state_root  # Not needed
+    # state.block_roots[2] = prev_block_root  # Not needed
+    
+    result = generate_validator_proof(state_file, validator_index, prev_state_root, prev_block_root)
+    return result.proof, result.root
 
 
 # Example usage
