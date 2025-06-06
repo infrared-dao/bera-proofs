@@ -20,6 +20,7 @@ MAX_VALIDATORS = 69  # For validators, balances, slashings
 EPOCHS_PER_SLASHINGS_VECTOR = 8  # For slashings
 VALIDATOR_REGISTRY_LIMIT = 1099511627776
 BYTES_PER_LOGS_BLOOM = 256
+PENDING_PARTIAL_WITHDRAWALS_LIMIT = 134217728
 
 
 # Precompute zero node hashes for up to 40 levels
@@ -86,6 +87,27 @@ class BeaconBlockHeader:
     parent_root: bytes
     state_root: bytes
     body_root: bytes
+
+    def serialize(self) -> List[bytes]:
+        # Pack fields in exactly the same order as Go’s HashTreeRootWith
+        roots = []
+        roots.append(self.slot.to_bytes(8, "little") + b"\x00" * 24)
+        roots.append(self.proposer_index.to_bytes(8, "little") + b"\x00" * 24)
+        roots.append(self.parent_root)
+        roots.append(self.state_root)
+        roots.append(self.body_root)
+        # pad to 8 leaves (2³) with zero‐hash
+        roots += [b"\x00" * 32] * 3
+        return roots
+
+    def merkle_tree(self) -> List[List[bytes]]:
+        return build_merkle_tree(self.serialize())
+
+    def merkle_root(self) -> bytes:
+        return self.merkle_tree()[-1][0]
+
+    def get_proof(self, index: int) -> List[bytes]:
+        return get_proof(self.merkle_tree(), index)
 
     def merkle_root(self) -> bytes:
         fields = [
@@ -587,6 +609,8 @@ def compute_root_from_proof(leaf: bytes, index: int, proof: List[bytes]) -> byte
         else:
             # Our node was on the right, sibling is on the left
             current = sha256(sibling + current).digest()
+        print(f"sibling: {sibling.hex()}")
+        print(f"current: {current.hex()}")
     return current
 
 
@@ -914,7 +938,22 @@ def generate_merkle_witness(
 
     # Combine proofs
     full_proof = validator_list_proof + proof_state
-    return full_proof, state_root
+
+    # Calculate generalized index:
+    # field_index = 9
+    # state_tree_gindex = (1 << 1) * field_index + 1  # SSZ: (2 * i) + 1 (root is 1-based)
+    # # For SSZ lists: length mix-in is at 38, elements at 39
+    # validators_elements_gindex = (state_tree_gindex << 1) | 1  # 39
+    field_index = 9
+    # field_gindex = (2 * field_index) + 1  # 19
+    validator_gindex = (field_index << 41) | validator_index
+
+    # Then, for the validator index within the list:
+    # validator_gindex = (validators_elements_gindex << 40) | validator_index
+    # validator_gindex = 39 << 40 | validator_index
+    # validator_gindex = (state_tree_gindex << 40) | validator_index + 1
+
+    return full_proof, state_root, validator_gindex
 
 
 # Example usage

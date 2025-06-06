@@ -283,7 +283,9 @@ class TestBlockchainFunctions(unittest.TestCase):
         )
 
     def test_generate_merkle_witness(self):
-        proof, state_root = generate_merkle_witness("test/data/state2.json", 39)
+        proof, state_root, validator_gindex = generate_merkle_witness(
+            "test/data/state2.json", 51
+        )
         self.assertIsInstance(state_root, bytes)
         self.assertEqual(len(state_root), 32)
         self.assertEqual(
@@ -293,6 +295,8 @@ class TestBlockchainFunctions(unittest.TestCase):
             ),
         )
         self.assertIsInstance(proof, list)
+        print(f"validator_gindex: {validator_gindex}")
+        print(f"proof: {[p.hex() for p in proof]}")
 
     def test_proposer_index_proof(self):
         # Beacon block header data
@@ -583,6 +587,7 @@ class TestBlockchainFunctions(unittest.TestCase):
             index_all += 1
 
         validator_root = validator.merkle_root()
+        print(f"val root: {validator_root.hex()}")
 
         # verify validator list
         state = load_and_process_state("test/data/state2.json")
