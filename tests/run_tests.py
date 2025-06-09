@@ -11,8 +11,8 @@ import sys
 import os
 from io import StringIO
 
-# Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+# Add project root to path so 'src' module can be imported
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 def run_test_suite(test_module_name, description):
     """

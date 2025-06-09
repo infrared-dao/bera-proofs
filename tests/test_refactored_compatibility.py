@@ -38,7 +38,7 @@ from ssz import (
 )
 
 # Import the refactored main function
-from main import generate_validator_proof
+from src.main import generate_validator_proof
 
 
 class TestRefactoredSSZCompatibility(unittest.TestCase):

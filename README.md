@@ -25,7 +25,7 @@ poetry install
 # Or with pip
 pip install -r requirements.txt
 
-# Run tests to verify installation
+# Verify installation with tests (see Testing section below)
 poetry run python tests/run_tests.py
 ```
 
@@ -289,3 +289,69 @@ MIT
 - [Berachain Documentation](https://docs.berachain.com/)
 - [ETH2 SSZ Specification](https://github.com/ethereum/consensus-specs/blob/dev/ssz/simple-serialize.md)
 - [Beacon Kit Implementation](https://github.com/berachain/beacon-kit)
+
+## 🧪 Testing
+
+The repository includes a comprehensive test suite to verify functionality and compatibility.
+
+### Running Tests
+
+#### **Recommended: Custom Test Runner**
+```bash
+# Run all tests with detailed output and summary
+poetry run python tests/run_tests.py
+```
+
+#### **Standard Python unittest**
+```bash
+# Run all tests
+poetry run python -m unittest discover tests -v
+
+# Run specific test modules
+poetry run python -m unittest tests.test_integration -v
+poetry run python -m unittest tests.test_refactored_compatibility -v
+```
+
+#### **API Integration Tests**
+```bash
+# Test the REST API (requires API server to be running)
+poetry run python tests/simple_integration_test.py
+```
+
+### Test Suite Overview
+
+The test suite consists of **23 comprehensive tests** across multiple categories:
+
+#### **Integration Tests** (`tests/test_integration.py`)
+- **3 tests** validating end-to-end proof generation workflows
+- Tests complete validator proof generation with expected outputs
+- Validates proof generation across different validator indices
+- Tests error handling for invalid inputs
+
+#### **Compatibility Tests** (`tests/test_refactored_compatibility.py`)
+- **20 tests** ensuring SSZ implementation compatibility
+- Validates serialization functions (uint64, uint256, boolean, bytes)
+- Tests merkle root calculations for various data structures
+- Verifies JSON-to-class conversion functionality
+- Tests container merkleization (Fork, BeaconState)
+- Validates module imports and accessibility
+
+#### **API Integration Tests** (`tests/simple_integration_test.py`)
+- **5 tests** validating REST API functionality
+- Tests all proof generation endpoints (validator, balance, proposer)
+- Validates API response format and structure
+- Requires API server to be running
+
+### Expected Test Output
+
+When all tests pass, you should see:
+```
+🎉 ALL TESTS PASSED! 🎉
+The refactored SSZ library is fully compatible with the original implementation.
+
+OVERALL TEST SUMMARY
+Total Tests Run: 23
+Successful: 23
+Failed: 0
+Errors: 0
+Skipped: 0

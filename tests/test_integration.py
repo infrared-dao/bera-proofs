@@ -11,9 +11,9 @@ import os
 from typing import List
 
 # Add parent directory to path for imports  
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from main import generate_validator_proof
+from src.main import generate_validator_proof
 
 class TestIntegration(unittest.TestCase):
     """
