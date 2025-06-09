@@ -99,10 +99,35 @@ def generate_validator_proof(state_file: str, validator_index: int,
     # Get state root
     state_root = _compute_state_root(state, validators_root)
     
+    # Get the validator object
+    validator = state.validators[validator_index]
+    
+    # Get the validator leaf (merkle root)
+    validator_leaf = validator.merkle_root()
+    
     metadata = {
         "proof_length": len(full_proof),
         "validator_count": len(state.validators),
-        "validator_pubkey": state.validators[validator_index].pubkey.hex(),
+        "validator_index": validator_index,
+        "validator_pubkey": validator.pubkey.hex(),
+        "validator_leaf": validator_leaf.hex(),
+        "validator": {
+            "pubkey": validator.pubkey.hex(),
+            "withdrawal_credentials": validator.withdrawal_credentials.hex(),
+            "effective_balance": validator.effective_balance,
+            "slashed": validator.slashed,
+            "activation_eligibility_epoch": validator.activation_eligibility_epoch,
+            "activation_epoch": validator.activation_epoch,
+            "exit_epoch": validator.exit_epoch,
+            "withdrawable_epoch": validator.withdrawable_epoch
+        },
+        "beacon_block_header": {
+            "slot": state.latest_block_header.slot,
+            "proposer_index": state.latest_block_header.proposer_index,
+            "parent_root": state.latest_block_header.parent_root.hex(),
+            "state_root": state.latest_block_header.state_root.hex(),
+            "body_root": state.latest_block_header.body_root.hex()
+        },
         "slot": state.slot,
         "field_index": 9,  # validators field
         "prev_state_root": prev_state_root_bytes.hex(),
@@ -182,10 +207,31 @@ def generate_balance_proof(state_file: str, validator_index: int,
     # Get state root
     state_root = _compute_state_root(state)
     
+    # Get the validator object for consistency with validator proof
+    validator = state.validators[validator_index]
+    
     metadata = {
         "proof_length": len(full_proof),
         "balance": str(state.balances[validator_index]),
+        "validator_index": validator_index,
         "validator_count": len(state.validators),
+        "validator": {
+            "pubkey": validator.pubkey.hex(),
+            "withdrawal_credentials": validator.withdrawal_credentials.hex(),
+            "effective_balance": validator.effective_balance,
+            "slashed": validator.slashed,
+            "activation_eligibility_epoch": validator.activation_eligibility_epoch,
+            "activation_epoch": validator.activation_epoch,
+            "exit_epoch": validator.exit_epoch,
+            "withdrawable_epoch": validator.withdrawable_epoch
+        },
+        "beacon_block_header": {
+            "slot": state.latest_block_header.slot,
+            "proposer_index": state.latest_block_header.proposer_index,
+            "parent_root": state.latest_block_header.parent_root.hex(),
+            "state_root": state.latest_block_header.state_root.hex(),
+            "body_root": state.latest_block_header.body_root.hex()
+        },
         "slot": state.slot,
         "field_index": 10,  # balances field
         "prev_state_root": prev_state_root_bytes.hex(),
@@ -292,10 +338,35 @@ def generate_proposer_proof(state_file: str, validator_index: int,
     # Return latest_block_header root for proposer proofs
     header_root = header_tree[-1][0]
     
+    # Get the validator object
+    validator = state.validators[validator_index]
+    
+    # Get the validator leaf (merkle root)
+    validator_leaf = validator.merkle_root()
+    
     metadata = {
         "proof_length": len(full_proof),
-        "validator_pubkey": state.validators[validator_index].pubkey.hex(),
+        "validator_index": validator_index,
+        "validator_pubkey": validator.pubkey.hex(),
+        "validator_leaf": validator_leaf.hex(),
         "proposer_index": state.latest_block_header.proposer_index,
+        "validator": {
+            "pubkey": validator.pubkey.hex(),
+            "withdrawal_credentials": validator.withdrawal_credentials.hex(),
+            "effective_balance": validator.effective_balance,
+            "slashed": validator.slashed,
+            "activation_eligibility_epoch": validator.activation_eligibility_epoch,
+            "activation_epoch": validator.activation_epoch,
+            "exit_epoch": validator.exit_epoch,
+            "withdrawable_epoch": validator.withdrawable_epoch
+        },
+        "beacon_block_header": {
+            "slot": state.latest_block_header.slot,
+            "proposer_index": state.latest_block_header.proposer_index,
+            "parent_root": state.latest_block_header.parent_root.hex(),
+            "state_root": state.latest_block_header.state_root.hex(),
+            "body_root": state.latest_block_header.body_root.hex()
+        },
         "slot": state.slot,
         "prev_state_root": prev_state_root_bytes.hex(),
         "prev_block_root": prev_block_root_bytes.hex()
