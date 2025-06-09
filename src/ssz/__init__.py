@@ -24,11 +24,17 @@ Modules:
 # Core functionality
 from .constants import *
 from .serialization import *
-from .encoding import *
 
 # Merkle operations  
 from .merkle import *
-from .merkle.encoding import encode_validators_leaf_list
+# Import encoding functions from the new location
+from .merkle.encoding import (
+    encode_balances,
+    encode_randao_mixes,
+    encode_block_roots,
+    encode_slashings,
+    encode_validators_leaf_list
+)
 
 # Container definitions
 from .containers import *

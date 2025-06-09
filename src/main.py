@@ -6,18 +6,14 @@ by both CLI and API interfaces. Supports validator, balance, and proposer proofs
 """
 
 import math
-import os
-import sys
 from typing import List, Tuple, Optional, Dict, Any
 from dataclasses import dataclass
+import json
 
 # Import from local ssz module
 from .ssz import (
     VALIDATOR_REGISTRY_LIMIT,
-    SLOTS_PER_HISTORICAL_ROOT,
-    EPOCHS_PER_SLASHINGS_VECTOR,
     BeaconState,
-    Validator,
     load_and_process_state,
     merkle_root_basic,
     merkle_root_element,
@@ -26,15 +22,8 @@ from .ssz import (
     merkle_list_tree,
     get_fixed_capacity_proof,
     compute_root_from_proof,
-    get_proof,
-    merkleize_chunks,
-    encode_balances,
-    encode_randao_mixes,
-    encode_block_roots,
-    encode_slashings,
-    encode_validators_leaf_list
+    get_proof
 )
-import json
 
 
 @dataclass

@@ -297,7 +297,8 @@ class TestRefactoredModules(unittest.TestCase):
 
     def test_encoding_module_imports(self):
         """Test that encoding module functions are properly accessible"""
-        from ssz.encoding import encode_balances, encode_randao_mixes, encode_block_roots, encode_slashings
+        # Now importing from merkle.encoding since we removed the old encoding.py
+        from ssz.merkle.encoding import encode_balances, encode_randao_mixes, encode_block_roots, encode_slashings
         
         # These should be callable functions
         self.assertTrue(callable(encode_balances))

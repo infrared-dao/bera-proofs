@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(poetry run:*)"
+      "Bash(poetry run:*)",
+      "Bash(grep:*)",
+      "Bash(awk:*)",
+      "Bash(echo:*)",
+      "Bash(python:*)",
+      "Bash(rm:*)",
+      "Bash(find:*)"
     ],
     "deny": []
   }
