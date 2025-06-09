@@ -38,7 +38,7 @@ from ssz import (
 )
 
 # Import the refactored main function
-from main import generate_merkle_witness
+from main import generate_validator_proof
 
 
 class TestRefactoredSSZCompatibility(unittest.TestCase):
@@ -256,27 +256,31 @@ class TestRefactoredSSZCompatibility(unittest.TestCase):
         state = json_to_class(data, BeaconState)
         self.assertEqual(state.slot, 123)
 
-    def test_generate_merkle_witness_refactored(self):
-        """Test that refactored generate_merkle_witness produces identical output"""
+    def test_generate_validator_proof_refactored(self):
+        """Test that refactored generate_validator_proof produces expected output"""
         # This test verifies the main refactored function works
         # We'll use the test data if available
         try:
-            proof, state_root = generate_merkle_witness("test/data/state.json", 39)
+            # Historical values from 8 slots ago (as required by specification)
+            prev_state_root = "01ef6767e8908883d1e84e91095bbb3f7d98e33773d13b6cc949355909365ff8"
+            prev_block_root = "28925c02852c6462577e73cc0fdb0f49bbf910b559c8c0d1b8f69cac38fa3f74"
+            
+            result = generate_validator_proof("test/data/state.json", 39, prev_state_root, prev_block_root)
             
             # Verify the proof is the expected length and type
-            self.assertIsInstance(proof, list)
-            self.assertIsInstance(state_root, bytes)
-            self.assertEqual(len(state_root), 32)
+            self.assertIsInstance(result.proof, list)
+            self.assertIsInstance(result.root, bytes)
+            self.assertEqual(len(result.root), 32)
             
-            # Verify expected state root (from our previous testing)
+            # Verify expected state root (updated based on actual output with correct historical values)
             expected_state_root = bytes.fromhex("12c3b9e21f6636e8f81bf4a501c00e5bdd789b561ae7e1455807dca558117992")
-            self.assertEqual(state_root, expected_state_root)
+            self.assertEqual(result.root, expected_state_root)
             
             # Verify proof has expected length (45 elements as we observed)
-            self.assertEqual(len(proof), 45)
+            self.assertEqual(len(result.proof), 45)
             
             # Verify all proof elements are 32-byte hashes
-            for i, step in enumerate(proof):
+            for i, step in enumerate(result.proof):
                 self.assertIsInstance(step, bytes, f"Proof step {i} should be bytes")
                 self.assertEqual(len(step), 32, f"Proof step {i} should be 32 bytes")
                 

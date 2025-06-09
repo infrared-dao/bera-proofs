@@ -74,7 +74,20 @@ GET /proofs/balance/{validator_index}?slot=head&json_file=path/to/state.json
 
 # Generate proposer proof
 GET /proofs/proposer/{validator_index}?slot=head&json_file=path/to/state.json
+
+# 🆕 With explicit historical roots
+GET /proofs/validator/{validator_index}?slot=head&json_file=path/to/state.json&prev_state_root=0x...&prev_block_root=0x...
+
+# 🆕 With auto-fetching from beacon API
+GET /proofs/validator/{validator_index}?slot=head&json_file=path/to/state.json&auto_fetch_historical=true
 ```
+
+**Query Parameters:**
+- `slot`: Beacon chain slot (default: "head")
+- `json_file`: Path to BeaconState JSON file
+- `prev_state_root`: *(optional)* Previous state root for historical data (32-byte hex)
+- `prev_block_root`: *(optional)* Previous block root for historical data (32-byte hex)  
+- `auto_fetch_historical`: *(optional)* Auto-fetch historical roots from beacon API (boolean)
 
 **Response Format:**
 ```json
@@ -99,6 +112,8 @@ API_PORT=8000
 
 ## 🖥️ Command Line Interface
 
+### Basic Usage
+
 ```bash
 # Generate proofs (returns JSON)
 poetry run python -m src.cli validator 0 --json-file test/data/state.json
@@ -111,6 +126,32 @@ poetry run python -m src.cli inspect test/data/state.json
 # Start API server
 poetry run python -m src.cli serve
 ```
+
+### 🆕 Historical Data Parameters
+
+All proof generation commands now support optional historical data parameters for dynamic root handling:
+
+```bash
+# Generate proofs with explicit historical roots
+poetry run python -m src.cli validator 0 \
+  --json-file test/data/state.json \
+  --prev-state-root 0x01ef6767e8908883d1e84e91095bbb3f7d98e33773d13b6cc949355909365ff8 \
+  --prev-block-root 0x28925c02852c6462577e73cc0fdb0f49bbf910b559c8c0d1b8f69cac38fa3f74
+
+# Auto-fetch historical data from beacon API (requires BEACON_RPC_URL)
+poetry run python -m src.cli validator 0 \
+  --json-file test/data/state.json \
+  --auto-fetch
+
+# Same options available for balance and proposer commands
+poetry run python -m src.cli balance 0 --json-file test/data/state.json --auto-fetch
+poetry run python -m src.cli proposer 0 --json-file test/data/state.json --auto-fetch
+```
+
+**Historical Data Options:**
+- `--prev-state-root`: Explicit previous state root (32-byte hex, with or without 0x prefix)
+- `--prev-block-root`: Explicit previous block root (32-byte hex, with or without 0x prefix)
+- `--auto-fetch`: Automatically fetch historical roots from beacon API using the current slot
 
 ## 🌳 Merkle Tree Visualization
 
@@ -154,12 +195,18 @@ Before generating merkle proofs, the following modifications are applied:
 # Reset latest block header state root
 latest_block_header.state_root = int(0).to_bytes(32)
 
+# 🆕 Dynamic historical data handling (configurable via parameters)
 # Update state roots with previous cycle data
-state.state_roots[slot % 8] = state_root_from_previous_cycle(slot - 8)
+state.state_roots[slot % 8] = prev_state_root or state_root_from_previous_cycle(slot - 8)
 
 # Update block roots with previous cycle data  
-state.block_roots[slot % 8] = block_root_from_previous_cycle(slot - 8)
+state.block_roots[slot % 8] = prev_block_root or block_root_from_previous_cycle(slot - 8)
 ```
+
+**Historical Data Sources** *(in priority order)*:
+1. **Explicit Parameters**: User-provided `prev_state_root` and `prev_block_root` values
+2. **Beacon API**: Auto-fetched from beacon client when `auto_fetch_historical=true`
+3. **Test Defaults**: Fallback values for testing and development environments
 
 ### 3. **Merkle Tree Structure**
 The library generates a 45-step merkle witness that navigates through:

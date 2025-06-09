@@ -12,7 +12,7 @@ import sys
 from typing import Dict, Any
 
 
-def test_api_endpoint(endpoint: str, description: str) -> bool:
+def check_api_endpoint(endpoint: str, description: str) -> bool:
     """Test a single API endpoint and return success status."""
     try:
         print(f"Testing {description}...")
@@ -32,7 +32,7 @@ def test_api_endpoint(endpoint: str, description: str) -> bool:
         return False
 
 
-def test_proof_endpoint(endpoint: str, description: str, expected_proof_type: str) -> bool:
+def check_proof_endpoint(endpoint: str, description: str, expected_proof_type: str) -> bool:
     """Test a proof generation endpoint with detailed validation."""
     try:
         print(f"Testing {description}...")
@@ -108,25 +108,25 @@ def main():
     results = []
     
     # Test basic endpoints
-    results.append(test_api_endpoint("/", "Root endpoint"))
-    results.append(test_api_endpoint("/health", "Health check"))
+    results.append(check_api_endpoint("/", "Root endpoint"))
+    results.append(check_api_endpoint("/health", "Health check"))
     
     # Test proof endpoints using local test data
     test_data_file = "test/data/state.json"
     
-    results.append(test_proof_endpoint(
+    results.append(check_proof_endpoint(
         f"/proofs/validator/0?json_file={test_data_file}", 
         "Validator proof generation", 
         "validator"
     ))
     
-    results.append(test_proof_endpoint(
+    results.append(check_proof_endpoint(
         f"/proofs/balance/0?json_file={test_data_file}", 
         "Balance proof generation", 
         "balance"
     ))
     
-    results.append(test_proof_endpoint(
+    results.append(check_proof_endpoint(
         f"/proofs/proposer/0?json_file={test_data_file}", 
         "Proposer proof generation", 
         "proposer"
