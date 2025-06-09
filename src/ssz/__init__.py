@@ -102,6 +102,7 @@ __all__ = [
     'Eth1Data',
     'ExecutionPayloadHeader', 
     'Validator',
+    'ValidatorBalance',
     'BeaconState',
     
     # Container utilities

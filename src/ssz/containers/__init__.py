@@ -21,7 +21,9 @@ from .beacon import (
     Eth1Data,
     ExecutionPayloadHeader,
     Validator,
-    BeaconState
+    ValidatorBalance,
+    BeaconState,
+    PendingPartialWithdrawal
 )
 from .utils import json_to_class, load_and_process_state
 
@@ -35,7 +37,9 @@ __all__ = [
     'Eth1Data', 
     'ExecutionPayloadHeader',
     'Validator',
+    'ValidatorBalance',
     'BeaconState',
+    'PendingPartialWithdrawal',
     
     # Utilities
     'json_to_class',

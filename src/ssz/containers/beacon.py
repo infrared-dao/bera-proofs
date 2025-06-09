@@ -228,6 +228,38 @@ class Validator:
 
 
 @dataclass
+class ValidatorBalance:
+    """ValidatorBalance combines a validator with their balance."""
+    validator: Validator
+    balance: int  # uint64
+    
+    def serialize(self) -> List[bytes]:
+        """Serialize ValidatorBalance fields to list of 32-byte chunks."""
+        from ..merkle.core import merkle_root_basic
+        
+        roots = []
+        roots.append(self.validator.merkle_root())
+        roots.append(merkle_root_basic(self.balance, "uint64"))
+        # pad to 4 leaves with zero-hash
+        roots += [b"\x00" * 32] * 2
+        return roots
+    
+    def merkle_tree(self) -> List[List[bytes]]:
+        """Build complete merkle tree for ValidatorBalance."""
+        from ..merkle.core import build_merkle_tree
+        return build_merkle_tree(self.serialize())
+    
+    def merkle_root(self) -> bytes:
+        """Calculate SSZ merkle root for ValidatorBalance."""
+        return self.merkle_tree()[-1][0]
+    
+    def get_proof(self, index: int) -> List[bytes]:
+        """Get merkle proof for field at index."""
+        from ..merkle.proof import get_proof
+        return get_proof(self.merkle_tree(), index)
+
+
+@dataclass
 class PendingPartialWithdrawal:
     """PendingPartialWithdrawal represents a pending withdrawal from a validator."""
     validator_index: int  # uint64

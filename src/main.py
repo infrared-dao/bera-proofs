@@ -14,6 +14,8 @@ import json
 from .ssz import (
     VALIDATOR_REGISTRY_LIMIT,
     BeaconState,
+    Validator,
+    ValidatorBalance,
     load_and_process_state,
     merkle_root_basic,
     merkle_root_element,
@@ -105,12 +107,19 @@ def generate_validator_proof(state_file: str, validator_index: int,
     # Get the validator leaf (merkle root)
     validator_leaf = validator.merkle_root()
     
+    # Create ValidatorBalance container
+    validator_balance = ValidatorBalance(
+        validator=validator,
+        balance=state.balances[validator_index]
+    )
+    
     metadata = {
         "proof_length": len(full_proof),
         "validator_count": len(state.validators),
         "validator_index": validator_index,
         "validator_pubkey": validator.pubkey.hex(),
         "validator_leaf": validator_leaf.hex(),
+        "validator_balance_root": validator_balance.merkle_root().hex(),
         "validator": {
             "pubkey": validator.pubkey.hex(),
             "withdrawal_credentials": validator.withdrawal_credentials.hex(),
@@ -210,11 +219,18 @@ def generate_balance_proof(state_file: str, validator_index: int,
     # Get the validator object for consistency with validator proof
     validator = state.validators[validator_index]
     
+    # Create ValidatorBalance container
+    validator_balance = ValidatorBalance(
+        validator=validator,
+        balance=state.balances[validator_index]
+    )
+    
     metadata = {
         "proof_length": len(full_proof),
         "balance": str(state.balances[validator_index]),
         "validator_index": validator_index,
         "validator_count": len(state.validators),
+        "validator_balance_root": validator_balance.merkle_root().hex(),
         "validator": {
             "pubkey": validator.pubkey.hex(),
             "withdrawal_credentials": validator.withdrawal_credentials.hex(),
@@ -344,11 +360,18 @@ def generate_proposer_proof(state_file: str, validator_index: int,
     # Get the validator leaf (merkle root)
     validator_leaf = validator.merkle_root()
     
+    # Create ValidatorBalance container
+    validator_balance = ValidatorBalance(
+        validator=validator,
+        balance=state.balances[validator_index]
+    )
+    
     metadata = {
         "proof_length": len(full_proof),
         "validator_index": validator_index,
         "validator_pubkey": validator.pubkey.hex(),
         "validator_leaf": validator_leaf.hex(),
+        "validator_balance_root": validator_balance.merkle_root().hex(),
         "proposer_index": state.latest_block_header.proposer_index,
         "validator": {
             "pubkey": validator.pubkey.hex(),
