@@ -28,6 +28,13 @@ EPOCHS_PER_HISTORICAL_VECTOR = 65536
 EPOCHS_PER_SLASHINGS_VECTOR = 8
 
 # ====================
+# Berachain Specific Constants
+# ====================
+
+# Berachain uses smaller vector size for state/block roots
+BERACHAIN_VECTOR = 8
+
+# ====================
 # Validator Limits
 # ====================
 
@@ -38,6 +45,9 @@ MAX_VALIDATORS = 69  # Note: This appears to be a test value, production would b
 # Maximum capacity for the validator registry
 # Production limit from the Ethereum specification
 VALIDATOR_REGISTRY_LIMIT = 1099511627776
+
+# Maximum pending partial withdrawals (Electra)
+PENDING_PARTIAL_WITHDRAWALS_LIMIT = 134217728  # 2^27
 
 # ====================
 # Execution Layer Constants

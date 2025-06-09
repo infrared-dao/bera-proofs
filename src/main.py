@@ -27,11 +27,12 @@ from .ssz import (
     get_fixed_capacity_proof,
     compute_root_from_proof,
     get_proof,
+    merkleize_chunks,
     encode_balances,
     encode_randao_mixes,
     encode_block_roots,
     encode_slashings,
-    merkleize_chunks
+    encode_validators_leaf_list
 )
 import json
 
@@ -332,107 +333,35 @@ def _generate_state_proof(
     Returns:
         List of proof steps for the state field
     """
-    # Build state field roots
-    state_fields = [
-        # Field (0): genesis_validators_root
-        merkle_root_basic(state.genesis_validators_root, "bytes32"),
-        # Field (1): slot
-        merkle_root_basic(state.slot, "uint64"),
-        # Field (2): fork
-        state.fork.merkle_root(),
-        # Field (3): latest_block_header
-        state.latest_block_header.merkle_root(),
-        # Field (4): block_roots
-        encode_block_roots(state.block_roots),
-        # Field (5): state_roots
-        encode_block_roots(state.state_roots),
-        # Field (6): eth1_data
-        state.eth1_data.merkle_root(),
-        # Field (7): eth1_deposit_index
-        merkle_root_basic(state.eth1_deposit_index, "uint64"),
-        # Field (8): latest_execution_payload_header
-        state.latest_execution_payload_header.merkle_root(),
-        # Field (9): validators
-        _encode_validators_field(state.validators),
-        # Field (10): balances
-        encode_balances(state.balances),
-        # Field (11): randao_mixes
-        encode_randao_mixes(state.randao_mixes),
-        # Field (12): next_withdrawal_index
-        merkle_root_basic(state.next_withdrawal_index, "uint64"),
-        # Field (13): next_withdrawal_validator_index
-        merkle_root_basic(state.next_withdrawal_validator_index, "uint64"),
-        # Field (14): slashings
-        encode_slashings(state.slashings),
-        # Field (15): total_slashing
-        merkle_root_basic(state.total_slashing, "uint64"),
-    ]
+    # Get serialized state fields using the container's serialize method
+    # Note: We assume this is not Electra for now
+    state_fields = state.serialize(prev_block_root, prev_state_root, is_electra=False)
     
-    # Pad to next power of two
-    n = len(state_fields)
-    k = math.ceil(math.log2(max(n, 1)))
-    num_leaves = 1 << k
-    padded = state_fields + [b"\0" * 32] * (num_leaves - n)
-
+    # The serialize method already returns the properly padded fields
     # Build state tree and get proof
-    state_tree = build_merkle_tree(padded)
+    state_tree = build_merkle_tree(state_fields)
     return get_proof(state_tree, field_index)
 
 
-def _encode_validators_field(validators) -> bytes:
-    """Encode validators field for merkleization."""
-    validator_elements = [merkle_root_element(v, "Validator") for v in validators]
-    validators_root = merkle_root_ssz_list(validators, "Validator", VALIDATOR_REGISTRY_LIMIT)
-    return validators_root
 
 
 def _compute_state_root(state: BeaconState, validators_root: Optional[bytes] = None) -> bytes:
     """Compute the BeaconState merkle root using the state tree approach."""
-    # Build state field roots (same as in _generate_state_proof)
-    state_fields = [
-        # Field (0): genesis_validators_root
-        merkle_root_basic(state.genesis_validators_root, "bytes32"),
-        # Field (1): slot
-        merkle_root_basic(state.slot, "uint64"),
-        # Field (2): fork
-        state.fork.merkle_root(),
-        # Field (3): latest_block_header
-        state.latest_block_header.merkle_root(),
-        # Field (4): block_roots
-        encode_block_roots(state.block_roots),
-        # Field (5): state_roots
-        encode_block_roots(state.state_roots),
-        # Field (6): eth1_data
-        state.eth1_data.merkle_root(),
-        # Field (7): eth1_deposit_index
-        merkle_root_basic(state.eth1_deposit_index, "uint64"),
-        # Field (8): latest_execution_payload_header
-        state.latest_execution_payload_header.merkle_root(),
-        # Field (9): validators
-        validators_root if validators_root is not None else _encode_validators_field(state.validators),
-        # Field (10): balances
-        encode_balances(state.balances),
-        # Field (11): randao_mixes
-        encode_randao_mixes(state.randao_mixes),
-        # Field (12): next_withdrawal_index
-        merkle_root_basic(state.next_withdrawal_index, "uint64"),
-        # Field (13): next_withdrawal_validator_index
-        merkle_root_basic(state.next_withdrawal_validator_index, "uint64"),
-        # Field (14): slashings
-        encode_slashings(state.slashings),
-        # Field (15): total_slashing
-        merkle_root_basic(state.total_slashing, "uint64"),
-    ]
+    # We need to extract the historical roots that were already set
+    # They should be at index 2 (slot % 8 where slot is typically 10, so 10 % 8 = 2)
+    prev_state_root = state.state_roots[2]
+    prev_block_root = state.block_roots[2]
     
-    # Pad to next power of two
-    n = len(state_fields)
-    k = math.ceil(math.log2(max(n, 1)))
-    num_leaves = 1 << k
-    padded = state_fields + [b"\0" * 32] * (num_leaves - n)
-
-    # Build state tree and return root
-    state_tree = build_merkle_tree(padded)
-    return state_tree[-1][0]
+    # Use the new serialize method to get all field roots
+    state_fields = state.serialize(prev_block_root, prev_state_root, is_electra=False)
+    
+    # If validators_root is provided, replace field 9 with it
+    if validators_root is not None:
+        state_fields[9] = validators_root
+    
+    # Build the merkle tree and get root
+    state_tree = build_merkle_tree(state_fields)
+    return state_tree[-1][0]  # Root is at the top level
 
 
 def generate_merkle_witness(

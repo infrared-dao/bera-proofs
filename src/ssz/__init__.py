@@ -28,6 +28,7 @@ from .encoding import *
 
 # Merkle operations  
 from .merkle import *
+from .merkle.encoding import encode_validators_leaf_list
 
 # Container definitions
 from .containers import *
@@ -60,6 +61,7 @@ __all__ = [
     'encode_randao_mixes',
     'encode_block_roots',
     'encode_slashings',
+    'encode_validators_leaf_list',
     
     # Core Merkle functions
     'merkle_root_basic',
