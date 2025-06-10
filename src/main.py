@@ -222,6 +222,8 @@ def generate_balance_proof(state_file: str, validator_index: int,
         "validator_index": validator_index,
         "balance": str(balance),
         "effective_balance": str(validator.effective_balance),
+        "balances_root": balances_root.hex(),
+        "balance_leaf": leaf.hex(),
         "validator_balance_root": validator_balance.merkle_root().hex(),
         "validator": {
             "pubkey": validator.pubkey.hex(),
