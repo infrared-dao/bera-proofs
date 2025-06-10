@@ -128,6 +128,8 @@ def generate_validator_proof(state_file: str, validator_index: int,
             "withdrawable_epoch": validator.withdrawable_epoch
         },
         "slot": state.slot,
+        "timestamp": state.latest_execution_payload_header.timestamp,
+        "block_number": state.latest_execution_payload_header.block_number,
         "prev_state_root": prev_state_root_bytes.hex(),
         "prev_block_root": prev_block_root_bytes.hex()
     }
@@ -221,6 +223,8 @@ def generate_balance_proof(state_file: str, validator_index: int,
             "withdrawable_epoch": validator.withdrawable_epoch
         },
         "slot": state.slot,
+        "timestamp": state.latest_execution_payload_header.timestamp,
+        "block_number": state.latest_execution_payload_header.block_number,
         "prev_state_root": prev_state_root_bytes.hex(),
         "prev_block_root": prev_block_root_bytes.hex()
     }
