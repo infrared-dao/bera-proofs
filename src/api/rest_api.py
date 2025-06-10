@@ -42,13 +42,17 @@ app = FastAPI(
     
     ## Features
     - **Validator Proofs**: Prove a validator exists in the state
-    - **Balance Proofs**: Prove a validator's balance
-    - **Live API Integration**: Fetch fresh data from beacon chain
-    - **JSON Fallback**: Support for offline operation with JSON files
+    - **Balance Proofs**: Prove a validator's balance (both precise and effective)
+    - **Live API Integration**: Automatically fetch fresh data from beacon chain
+    - **Auto-fetch Historical**: Automatically retrieves required historical roots
     
     ## Proof Types
     All proof endpoints return a list of 32-byte merkle tree sibling hashes
     that can be used to reconstruct the root hash for verification.
+    
+    ## Data Sources
+    The API exclusively uses live beacon chain data fetched via the standard
+    Beacon API. For local file operations, use the CLI tool instead.
     """,
     version="1.0.0",
     contact={
@@ -173,6 +177,8 @@ async def generate_validator_proof(
     beacon state at the given slot. The proof can be verified against the
     state root to confirm the validator's presence.
     
+    All data is automatically fetched from the beacon chain API.
+    
     **Proof Structure:**
     - Validator proof within the validators list
     - State proof for the validators field
@@ -183,27 +189,26 @@ async def generate_validator_proof(
     - Validate validator data for external protocols
     """
     try:
-        result: ProofResult = service.get_validator_proof(
+        result = service.get_validator_proof(
             val_index=request.val_index,
-            slot=request.slot,
-            json_file=request.json_file or ""
+            prev_state_root=request.prev_state_root,
+            prev_block_root=request.prev_block_root,
+            slot=request.slot
         )
         
-        # Convert bytes to hex strings for JSON response
-        proof_hex = [f"0x{step.hex()}" for step in result.proof]
-        
         return ValidatorProofResponse(
-            proof=proof_hex,
-            root=f"0x{result.root.hex()}",
+            proof=result["proof"],
+            root=result["root"],
             validator_index=request.val_index,
             slot=request.slot,
             proof_type="validator",
-            metadata=result.metadata
+            metadata=result["metadata"]
         )
-        
+    except ProofServiceError:
+        raise
     except Exception as e:
-        logger.error(f"Validator proof generation failed: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Error in validator proof endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/proofs/balance", response_model=BalanceProofResponse)
@@ -214,81 +219,98 @@ async def generate_balance_proof(
     """
     Generate a validator balance proof.
     
-    Generates a Merkle proof that proves a specific validator's balance
-    in the beacon state. This can be used to verify staking balances
-    without downloading the full state.
+    Generates a Merkle proof that proves a validator's balance exists in the
+    beacon state at the given slot. The proof includes both the precise balance
+    and effective balance.
+    
+    All data is automatically fetched from the beacon chain API.
     
     **Proof Structure:**
     - Balance proof within the balances list
     - State proof for the balances field
     
     **Use Cases:**
-    - Verify staking balances
-    - Prove validator economic status
-    - Calculate rewards and penalties
+    - Verify validator balance for external protocols
+    - Prove staking rewards and penalties
+    - Validate financial data for auditing
     """
     try:
-        result: ProofResult = service.get_balances_proof(
+        result = service.get_balances_proof(
             val_index=request.val_index,
-            slot=request.slot,
-            json_file=request.json_file or ""
+            prev_state_root=request.prev_state_root,
+            prev_block_root=request.prev_block_root,
+            slot=request.slot
         )
         
-        # Convert bytes to hex strings for JSON response
-        proof_hex = [f"0x{step.hex()}" for step in result.proof]
-        
         return BalanceProofResponse(
-            proof=proof_hex,
-            root=f"0x{result.root.hex()}",
+            proof=result["proof"],
+            root=result["root"],
             validator_index=request.val_index,
             slot=request.slot,
             proof_type="balance",
-            metadata=result.metadata
+            metadata=result["metadata"]
         )
-        
+    except ProofServiceError:
+        raise
     except Exception as e:
-        logger.error(f"Balance proof generation failed: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Error in balance proof endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/proofs/validator/{val_index}")
 async def generate_validator_proof_get(
     val_index: int,
     slot: str = "head",
-    json_file: Optional[str] = None,
+    prev_state_root: Optional[str] = None,
+    prev_block_root: Optional[str] = None,
     service: ProofService = Depends(get_proof_service)
 ):
     """
-    Generate validator proof via GET request.
+    Generate validator proof via GET request (convenience endpoint).
     
-    Convenience endpoint for simple validator proof generation.
+    Same functionality as POST endpoint but accessible via GET for simple integrations.
     """
-    request = ValidatorProofRequest(
-        val_index=val_index,
-        slot=slot,
-        json_file=json_file
-    )
-    return await generate_validator_proof(request, service)
+    try:
+        result = service.get_validator_proof(
+            val_index=val_index,
+            prev_state_root=prev_state_root,
+            prev_block_root=prev_block_root,
+            slot=slot
+        )
+        return result
+    except ProofServiceError:
+        raise
+    except Exception as e:
+        logger.error(f"Error in validator proof GET endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/proofs/balance/{val_index}")
 async def generate_balance_proof_get(
     val_index: int,
-    slot: str = "head", 
-    json_file: Optional[str] = None,
+    slot: str = "head",
+    prev_state_root: Optional[str] = None,
+    prev_block_root: Optional[str] = None,
     service: ProofService = Depends(get_proof_service)
 ):
     """
-    Generate balance proof via GET request.
+    Generate balance proof via GET request (convenience endpoint).
     
-    Convenience endpoint for simple balance proof generation.
+    Same functionality as POST endpoint but accessible via GET for simple integrations.
     """
-    request = BalanceProofRequest(
-        val_index=val_index,
-        slot=slot,
-        json_file=json_file
-    )
-    return await generate_balance_proof(request, service)
+    try:
+        result = service.get_balances_proof(
+            val_index=val_index,
+            prev_state_root=prev_state_root,
+            prev_block_root=prev_block_root,
+            slot=slot
+        )
+        return result
+    except ProofServiceError:
+        raise
+    except Exception as e:
+        logger.error(f"Error in balance proof GET endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8000, dev: bool = False):

@@ -17,17 +17,33 @@ class ProofRequest(BaseModel):
     Attributes:
         val_index: Validator index for proof generation
         slot: Slot identifier ("head", "finalized", or specific slot number)
-        json_file: Optional path to JSON file (fallback if API fails)
+        prev_state_root: Optional previous state root from 8 slots ago (hex string)
+        prev_block_root: Optional previous block root from 8 slots ago (hex string)
     """
     val_index: int = Field(..., ge=0, description="Validator index (must be >= 0)")
     slot: str = Field(default="head", description="Slot identifier")
-    json_file: Optional[str] = Field(default="", description="Optional JSON file path")
+    prev_state_root: Optional[str] = Field(default=None, description="Previous state root from 8 slots ago (hex string)")
+    prev_block_root: Optional[str] = Field(default=None, description="Previous block root from 8 slots ago (hex string)")
     
     @validator('slot')
     def validate_slot(cls, v):
         """Validate slot parameter."""
         if v not in ["head", "finalized"] and not v.isdigit():
             raise ValueError("Slot must be 'head', 'finalized', or a valid number")
+        return v
+    
+    @validator('prev_state_root')
+    def validate_prev_state_root(cls, v):
+        """Validate prev_state_root is proper hex string if provided."""
+        if v is not None and (not v.startswith('0x') or len(v) != 66):
+            raise ValueError("prev_state_root must be a 32-byte hex string starting with '0x'")
+        return v
+    
+    @validator('prev_block_root')
+    def validate_prev_block_root(cls, v):
+        """Validate prev_block_root is proper hex string if provided."""
+        if v is not None and (not v.startswith('0x') or len(v) != 66):
+            raise ValueError("prev_block_root must be a 32-byte hex string starting with '0x'")
         return v
 
 

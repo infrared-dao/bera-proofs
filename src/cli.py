@@ -158,6 +158,15 @@ def validator(validator_index: int, json_file: str = None, historical_state_file
             console.print(f"[green]Extracted block_root: {prev_block_root}[/green]")
         
         if json_file:
+            # For file-based operations, historical data is mandatory for correct state root computation
+            if not historical_state_file and (not prev_state_root or not prev_block_root):
+                raise click.ClickException(
+                    "Historical data is required when using --json-file. Please provide either:\n"
+                    "  1. --historical-state-file path/to/historical_state.json\n"
+                    "  2. Both --prev-state-root 0x123... and --prev-block-root 0x456...\n\n"
+                    "Historical data from 8 slots ago is required to generate the correct state root."
+                )
+            
             # Use local JSON file directly
             result = generate_validator_proof(json_file, validator_index, prev_state_root, prev_block_root)
             
@@ -262,6 +271,15 @@ def balance(validator_index: int, json_file: str = None, historical_state_file: 
             console.print(f"[green]Extracted block_root: {prev_block_root}[/green]")
         
         if json_file:
+            # For file-based operations, historical data is mandatory for correct state root computation
+            if not historical_state_file and (not prev_state_root or not prev_block_root):
+                raise click.ClickException(
+                    "Historical data is required when using --json-file. Please provide either:\n"
+                    "  1. --historical-state-file path/to/historical_state.json\n"
+                    "  2. Both --prev-state-root 0x123... and --prev-block-root 0x456...\n\n"
+                    "Historical data from 8 slots ago is required to generate the correct state root."
+                )
+            
             # Use local JSON file directly
             result = generate_balance_proof(json_file, validator_index, prev_state_root, prev_block_root)
             
