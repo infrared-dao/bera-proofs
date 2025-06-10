@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(poetry run:*)",
+      "Bash(grep:*)",
+      "Bash(awk:*)",
+      "Bash(echo:*)",
+      "Bash(python:*)",
+      "Bash(rm:*)",
+      "Bash(find:*)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ],
+    "deny": []
+  }
+}
