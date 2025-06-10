@@ -16,7 +16,6 @@ from .ssz import (
     Validator,
     ValidatorBalance,
     load_and_process_state,
-    merkle_root_element,
     merkle_root_basic,
     get_proof,
     get_fixed_capacity_proof,
@@ -24,6 +23,11 @@ from .ssz import (
     build_merkle_tree,
     merkle_list_tree,
     VALIDATOR_REGISTRY_LIMIT
+)
+
+from src.ssz.merkle import (
+    get_fixed_capacity_proof,
+    merkle_list_tree
 )
 
 logger = logging.getLogger(__name__)
@@ -69,7 +73,7 @@ def generate_validator_proof(state_file: str, validator_index: int,
     state.block_roots[2] = prev_block_root_bytes
     
     # Generate validator proof within the validators list
-    validator_elements = [merkle_root_element(v, "Validator") for v in state.validators]
+    validator_elements = [v.merkle_root() for v in state.validators]
     val_proof = get_fixed_capacity_proof(
         validator_elements,
         validator_index,
@@ -339,7 +343,7 @@ def generate_merkle_witness(
     current_index = validator_index
     
     # Step 1: Get proof of validator within validators list
-    validator_tree = merkle_list_tree([merkle_root_element(v, "Validator") for v in state.validators])
+    validator_tree = merkle_list_tree([v.merkle_root() for v in state.validators])
     validator_proof = get_fixed_capacity_proof(validator_tree, current_index, VALIDATOR_REGISTRY_LIMIT)
     proof.extend(validator_proof)
     
