@@ -127,7 +127,13 @@ def generate_validator_proof(state_file: str, validator_index: int,
             "exit_epoch": validator.exit_epoch,
             "withdrawable_epoch": validator.withdrawable_epoch
         },
-        "slot": state.slot,
+        "header": {
+            "slot": state.latest_block_header.slot,
+            "proposer_index": state.latest_block_header.proposer_index,
+            "parent_root": state.latest_block_header.parent_root.hex(),
+            "state_root": state.latest_block_header.state_root.hex(),
+            "body_root": state.latest_block_header.body_root.hex()
+        },
         "timestamp": state.latest_execution_payload_header.timestamp,
         "block_number": state.latest_execution_payload_header.block_number,
         "prev_state_root": prev_state_root_bytes.hex(),
@@ -235,7 +241,13 @@ def generate_balance_proof(state_file: str, validator_index: int,
             "exit_epoch": validator.exit_epoch,
             "withdrawable_epoch": validator.withdrawable_epoch
         },
-        "slot": state.slot,
+        "header": {
+            "slot": state.latest_block_header.slot,
+            "proposer_index": state.latest_block_header.proposer_index,
+            "parent_root": state.latest_block_header.parent_root.hex(),
+            "state_root": state.latest_block_header.state_root.hex(),
+            "body_root": state.latest_block_header.body_root.hex()
+        },
         "timestamp": state.latest_execution_payload_header.timestamp,
         "block_number": state.latest_execution_payload_header.block_number,
         "prev_state_root": prev_state_root_bytes.hex(),
