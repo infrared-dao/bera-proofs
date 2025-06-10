@@ -1,10 +1,63 @@
 # bera-proofs
 
-**Berachain Merkle Proof Generator** - Generate merkle proofs from BeaconState JSON data for Berachain's beacon-kit implementation.
+**Berachain Merkle Proof Generator** - Generate cryptographic proofs for validator existence and balances on Berachain's beacon-kit implementation.
 
 ## 🎯 Purpose
 
-Sufficient discrepancies exist between Berachain's beacon-kit implementation and the ETH2 specification that this standalone library was needed to generate compatible merkle proofs. This library ensures accurate proof generation that matches Berachain's specific SSZ implementation.
+This library generates Merkle proofs that are compatible with Berachain's specific SSZ implementation. Due to significant differences between Berachain's beacon-kit and the ETH2 specification, standard tools don't work - this library bridges that gap.
+
+## 🚀 Quick Example
+
+```bash
+# Install and setup
+git clone <repository-url>
+cd bera-proofs
+poetry install
+
+# Generate proofs with CLI
+poetry run python -m src.cli validator 5 \
+  --json-file test/data/state.json \
+  --historical-state-file test/data/state-8.json
+
+poetry run python -m src.cli balance 5 \
+  --json-file test/data/state.json \
+  --historical-state-file test/data/state-8.json
+```
+
+**Response Example:**
+```json
+{
+  "proof": ["0x86ed...", "0x129a...", "0x4aae...", ...],
+  "root": "0x12c3b9e21f6636e8f81bf4a501c00e5bdd789b561ae7e1455807dca558117992",
+  "metadata": {
+    "validator_index": 5,
+    "balance": "547445850000000",
+    "effective_balance": "540000000000000",
+    "proof_type": "balance_proof"
+  }
+}
+```
+
+## 💡 Use Cases
+
+- **🌉 Cross-chain Bridges**: Verify validator states on other blockchains
+- **💡 Light Clients**: Prove validator participation without downloading full state
+- **🏦 Staking Protocols**: Cryptographically verify validator balances and status
+- **📊 Analytics & Auditing**: Generate tamper-proof proofs for validator data
+- **🔐 Zero-Knowledge Applications**: Use as inputs for ZK circuits requiring validator data
+
+## 🏗️ Architecture
+
+```
+┌─────────────┐     ┌─────────────┐     ┌──────────────┐
+│     CLI     │────▶│ Proof Gen   │────▶│ SSZ Library  │
+└─────────────┘     └─────────────┘     └──────────────┘
+        │                    │                     │
+        ▼                    ▼                     ▼
+┌─────────────┐     ┌─────────────┐     ┌──────────────┐
+│ JSON Files  │     │ Test Data   │     │ Merkle Trees │
+└─────────────┘     └─────────────┘     └──────────────┘
+```
 
 ## 🔧 Installation
 
@@ -14,183 +67,148 @@ cd bera-proofs
 poetry install
 ```
 
-## 🚀 Quick Start
+## 🖥️ CLI Usage
 
-Generate proofs using historical state files (recommended):
+The CLI works with local JSON files and provides reliable, offline proof generation.
 
+### Basic Commands
 ```bash
-# Validator proof
+# Get help
+poetry run python -m src.cli --help
+poetry run python -m src.cli validator --help
+poetry run python -m src.cli balance --help
+
+# Generate validator proof
+poetry run python -m src.cli validator 5 \
+  --json-file current_state.json \
+  --historical-state-file historical_state.json
+
+# Generate balance proof  
+poetry run python -m src.cli balance 5 \
+  --json-file current_state.json \
+  --historical-state-file historical_state.json
+```
+
+### Using Test Data
+```bash
+# Quick test with included test data
+poetry run python -m src.cli validator 5 \
+  --json-file test/data/state.json \
+  --historical-state-file test/data/state-8.json
+
+poetry run python -m src.cli balance 5 \
+  --json-file test/data/state.json \
+  --historical-state-file test/data/state-8.json
+```
+
+## 🕰️ Historical Data Requirements
+
+Berachain requires historical state data from 8 slots ago for proof generation. The CLI handles this through:
+
+### 📁 Historical State Files (Recommended)
+Use two state files - current and historical:
+```bash
 poetry run python -m src.cli validator 0 \
   --json-file current_state.json \
   --historical-state-file historical_state.json
+```
 
-# Balance proof  
-poetry run python -m src.cli balance 0 \
+### ⚙️ Manual Historical Roots
+Provide specific historical roots if you don't have historical state files:
+```bash
+poetry run python -m src.cli validator 0 \
   --json-file current_state.json \
-  --historical-state-file historical_state.json
+  --prev-state-root 0x01ef6767e8908883d1e84e91095bbb3f7d98e33773d13b6cc949355909365ff8 \
+  --prev-block-root 0x28925c02852c6462577e73cc0fdb0f49bbf910b559c8c0d1b8f69cac38fa3f74
 ```
 
-## 📖 Documentation
-
-For detailed options and parameters:
-
+### 🧪 Test Mode
+When using test data, the CLI automatically uses appropriate test defaults:
 ```bash
-poetry run python -m src.cli validator --help
-poetry run python -m src.cli balance --help
-```
-
-## 🌐 REST API
-
-```bash
-# Start API server
-poetry run python -m src.cli serve
-
-# Health check
-curl http://localhost:8000/health
-
-# Generate proofs
-curl "http://localhost:8000/proofs/validator/0?json_file=state.json"
-curl "http://localhost:8000/proofs/balance/0?json_file=state.json"
+# CLI uses test defaults automatically
+poetry run python -m src.cli validator 0 --json-file test/data/state.json
 ```
 
 ## 🧪 Testing
 
 ```bash
+# Run all tests
 poetry run python tests/run_tests.py
+
+# Test specific components
+poetry run python -m pytest tests/test_integration.py
 ```
 
-## 📄 License
+## 🔍 Berachain vs ETH2 Differences
 
-MIT
+### Key Implementation Differences
+- **🗂️ BeaconState Fields**: ~15 ETH2 fields removed, 2 new fields added
+- **📦 List Merkleization**: All lists treated as fixed vectors with appended length
+- **🔄 State Modifications**: Historical data injection before proof generation
 
-## 🔗 Related Resources
+### Proof Structure
+- **45-step Merkle witness** navigating through validator lists and BeaconState fields
+- **Fixed capacity proofs** using ETH2 registry limits
+- **Compatible roots** that match Berachain's beacon-kit implementation
 
-- [Berachain Documentation](https://docs.berachain.com/)
-- [ETH2 SSZ Specification](https://github.com/ethereum/consensus-specs/blob/dev/ssz/simple-serialize.md)
-- [Beacon Kit Implementation](https://github.com/berachain/beacon-kit)
+## 🌳 Visualization Tools
 
-## 🌳 Merkle Tree Visualization
-
-The library includes powerful visualization tools to help understand the proof structure and tree navigation.
+Explore proof structure with built-in visualization:
 
 ```bash
-# View complete merkle proof visualization
-python3 src/visualize_merkle.py
+# Interactive proof visualization
+python src/visualize_merkle.py
+
+# Features:
+# - Tree structure diagrams
+# - Step-by-step proof paths  
+# - ETH2 vs Berachain comparisons
+# - Performance metrics
 ```
 
-This comprehensive visualization includes:
-- **Tree Structure Diagram**: Visual representation of the Merkle tree hierarchy
-- **ASCII Proof Path**: Step-by-step visualization of the 45-step proof
-- **Proof Structure Analysis**: Breakdown of validator navigation, BeaconState fields, and root computation
-- **ETH2 vs Berachain Comparison**: Side-by-side comparison of implementation differences
-- **Interactive Examples**: Demonstrations with different validator indices
+## 📊 Data Formats
 
-## 🔍 Berachain BeaconState Differences
+### Input Requirements
+- **Current State**: BeaconState JSON from current slot
+- **Historical State**: BeaconState JSON from 8 slots ago (preferred)
+- **OR Historical Roots**: Manual `prev_state_root` and `prev_block_root` values
 
-Berachain's beacon-kit implementation differs significantly from the ETH2 specification:
-
-### Field Differences
-- **Removed**: ~15 ETH2 standard fields have been dropped
-- **Added**: 
-  - One new field for Deneb upgrade compatibility
-  - One new field for Electra upgrade compatibility
-
-### SSZ Implementation Differences
-
-#### 1. **List Merkleization Behavior**
-```
-ETH2 Spec: Lists are merkleized as variable-length structures
-Berachain: ALL lists are merkleized as fixed vectors using original ETH2 parameters,
-           then little-endian list length is appended
-```
-
-#### 2. **Pre-Merkleization State Modifications**
-Before generating merkle proofs, the following modifications are applied:
-
-```python
-# Reset latest block header state root
-latest_block_header.state_root = int(0).to_bytes(32)
-
-# 🆕 Dynamic historical data handling (configurable via parameters)
-# Update state roots with previous cycle data
-state.state_roots[slot % 8] = prev_state_root or state_root_from_previous_cycle(slot - 8)
-
-# Update block roots with previous cycle data  
-state.block_roots[slot % 8] = prev_block_root or block_root_from_previous_cycle(slot - 8)
-```
-
-**Historical Data Sources** *(in priority order)*:
-1. **Explicit Parameters**: User-provided `prev_state_root` and `prev_block_root` values
-2. **Beacon API**: Auto-fetched from beacon client when `auto_fetch_historical=true`
-3. **Test Defaults**: Fallback values for testing and development environments
-
-### 3. **Merkle Tree Structure**
-The library generates a 45-step merkle witness that navigates through:
-- Validator list proof (variable steps based on validator count)
-- BeaconState container field proofs
-- Root hash computations
-
-## 🌳 BeaconState Merkle Tree Structure
-
-```
-                           🏁 STATE ROOT
-                                │
-                ┌───────────────┴───────────────┐
-                │                               │
-        🌿 BEACON STATE                    OTHER FIELDS
-           (16 fields)                          │
-                │                               │
-    ┌───────────┼───────────┐                  ...
-    │           │           │
- FIELD_0     FIELD_9      FIELD_15
-(genesis)  (validators) (total_slashing)
-    │           │            │
-    │     ┌─────┼─────┐      │
-    │     │     │     │      │
-    │   VAL_0 VAL_1 VAL_N    │
-    │     │     │     │      │
-    └─────┼─────┼─────┼──────┘
-          │     │     │
-        🎯 TARGET VALIDATOR
-           (Index N)
-```
-
-**BeaconState Fields (16 total):**
-```
- 0. genesis_validators_root    8. latest_execution_payload_header
- 1. slot                       9. validators ← TARGET FIELD
- 2. fork                      10. balances
- 3. latest_block_header       11. randao_mixes
- 4. block_roots               12. next_withdrawal_index
- 5. state_roots               13. next_withdrawal_validator_index
- 6. eth1_data                 14. slashings
- 7. eth1_deposit_index        15. total_slashing
-```
-
-**Proof Path (45 steps):**
-1. Start at target validator leaf
-2. Navigate up validator list tree (~10 steps)
-3. Combine validator field with other 15 BeaconState fields (~25 steps)
-4. Compute final state root (~10 steps)
+### Output Format
+All proofs return:
+- **proof**: Array of 32-byte hex strings (merkle siblings)
+- **root**: Final state root for verification  
+- **metadata**: Rich information including validator details, balances, and proof statistics
 
 ## 📁 Project Structure
 
 ```
 bera-proofs/
 ├── src/
-│   ├── main.py                 # Main proof generation
-│   ├── visualize_merkle.py     # Merkle tree visualization
+│   ├── main.py                 # Core proof generation
+│   ├── cli.py                  # Command-line interface
+│   ├── visualize_merkle.py     # Visualization tools
 │   └── ssz/                    # Modular SSZ library
-│       ├── __init__.py
-│       ├── constants.py        # SSZ constants and limits
-│       ├── encoding/           # Field encoding functions
-│       ├── merkle/            # Merkle tree operations
-│       └── containers/        # SSZ container classes
-├── test/
-│   └── data/
-│       └── state.json         # Test BeaconState data
-├── tests/                     # Comprehensive test suite
-│   ├── test_refactored_compatibility.py
-│   ├── test_integration.py
-│   └── run_tests.py
+├── test/data/                  # Test state files
+│   ├── state.json             # Current state example
+│   └── state-8.json           # Historical state example
+├── tests/                      # Test suite
 └── README.md
+```
+
+## 🛠️ Development Status
+
+- ✅ **CLI**: Fully functional and tested
+- ✅ **Proof Generation**: Working with Berachain SSZ
+- ✅ **Test Suite**: Comprehensive coverage
+- ✅ **Visualization**: Interactive proof exploration
+- 🚧 **API**: Under development
+
+## 📄 License
+
+MIT
+
+## 🔗 Resources
+
+- [Berachain Documentation](https://docs.berachain.com/)
+- [ETH2 SSZ Specification](https://github.com/ethereum/consensus-specs/blob/dev/ssz/simple-serialize.md)
+- [Beacon Kit Implementation](https://github.com/berachain/beacon-kit)

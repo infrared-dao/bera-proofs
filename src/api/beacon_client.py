@@ -37,10 +37,8 @@ class BeaconAPIClient:
         Args:
             base_url: Base URL for the beacon API. If None, uses BEACON_RPC_URL env var.
         """
-        self.base_url = base_url or os.getenv('BEACON_RPC_URL')
-        if not self.base_url:
-            raise BeaconAPIError("BEACON_RPC_URL environment variable not set")
-            
+        self.base_url = base_url or os.getenv('BEACON_RPC_URL', 'http://35.246.217.85:3500')
+        
         self.session = requests.Session()
         self.session.headers.update({
             'Content-Type': 'application/json',
@@ -79,8 +77,31 @@ class BeaconAPIClient:
             # Sanitize the data
             return self.sanitize_beacon_data(state_data)
             
+        except requests.ConnectionError as e:
+            raise BeaconAPIError(
+                f"Failed to connect to beacon API at {self.base_url}. "
+                f"Please check:\n"
+                f"1. The beacon node is running and accessible\n"
+                f"2. The URL is correct (current: {self.base_url})\n"
+                f"3. Network connectivity\n"
+                f"4. Firewall settings\n\n"
+                f"You can:\n"
+                f"- Set a custom endpoint: export BEACON_RPC_URL='http://your-beacon-node:3500'\n"
+                f"- Use CLI with local files instead: --json-file state.json --historical-state-file historical.json\n\n"
+                f"Original error: {e}"
+            )
+        except requests.Timeout as e:
+            raise BeaconAPIError(
+                f"Timeout connecting to beacon API at {self.base_url}. "
+                f"The beacon node may be slow or unresponsive. "
+                f"Try again later or use local files with the CLI. "
+                f"Original error: {e}"
+            )
         except requests.RequestException as e:
-            raise BeaconAPIError(f"Failed to fetch beacon state: {e}")
+            raise BeaconAPIError(
+                f"Request failed to beacon API at {self.base_url}. "
+                f"Error: {e}"
+            )
         except Exception as e:
             raise BeaconAPIError(f"Error processing beacon state: {e}")
     
@@ -113,6 +134,12 @@ class BeaconAPIClient:
             
             return self.sanitize_beacon_data(header_data)
             
+        except requests.ConnectionError as e:
+            raise BeaconAPIError(
+                f"Failed to connect to beacon API for header fetch. "
+                f"Please check beacon node connectivity at {self.base_url}. "
+                f"Original error: {e}"
+            )
         except requests.RequestException as e:
             raise BeaconAPIError(f"Failed to fetch beacon header: {e}")
         except Exception as e:

@@ -107,6 +107,9 @@ class ProofService:
         except ValueError as e:
             logger.error(f"Validation error generating validator proof: {e}")
             raise ProofServiceError(f"Validation error: {e}")
+        except BeaconAPIError:
+            # Re-raise BeaconAPIError to preserve improved error messages
+            raise
         except Exception as e:
             logger.error(f"Error generating validator proof: {e}")
             raise ProofServiceError(f"Failed to generate validator proof: {e}")
@@ -184,6 +187,9 @@ class ProofService:
         except ValueError as e:
             logger.error(f"Validation error generating balance proof: {e}")
             raise ProofServiceError(f"Validation error: {e}")
+        except BeaconAPIError:
+            # Re-raise BeaconAPIError to preserve improved error messages
+            raise
         except Exception as e:
             logger.error(f"Error generating balance proof: {e}")
             raise ProofServiceError(f"Failed to generate balance proof: {e}") 
