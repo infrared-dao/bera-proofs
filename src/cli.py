@@ -34,24 +34,53 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 
-def extract_historical_roots_from_file(historical_state_file: str) -> Tuple[str, str]:
+def extract_historical_roots_from_file(historical_file: str) -> Tuple[str, str]:
     """
-    Extract state and block roots from a historical state file.
+    Extract state and block roots from a historical state file or header file.
     
     Args:
-        historical_state_file: Path to the historical state JSON file
+        historical_file: Path to either:
+            - A full beacon state JSON file
+            - A beacon block header JSON file
         
     Returns:
         Tuple of (state_root, block_root) as hex strings with 0x prefix
     """
     try:
-        state = load_and_process_state(historical_state_file)
-        # Extract roots from position (slot % 8) as per ETH2 spec
-        state_root = f"0x{state.state_roots[state.slot % 8].hex()}"
-        block_root = f"0x{state.block_roots[state.slot % 8].hex()}"
-        return state_root, block_root
+        with open(historical_file, 'r') as f:
+            data = json.load(f)
+        
+        # Check if this is a header file (has state_root at top level)
+        if 'state_root' in data or (isinstance(data.get('data'), dict) and 'state_root' in data['data']):
+            # This is a header file
+            header_data = data.get('data', data)
+            state_root = header_data.get('state_root', '')
+            # For a header, we use the block root (hash) of this block
+            # In a header context, the block root would be the hash of this header
+            # But if not provided, we can use parent_root as a fallback
+            block_root = header_data.get('block_root', header_data.get('root', header_data.get('parent_root', '')))
+            
+            # Normalize hex values
+            if state_root.startswith('0x'):
+                state_root = state_root
+            else:
+                state_root = f"0x{state_root}"
+                
+            if block_root.startswith('0x'):
+                block_root = block_root
+            else:
+                block_root = f"0x{block_root}"
+                
+            return state_root, block_root
+        else:
+            # This is a full state file, use the existing logic
+            state = load_and_process_state(historical_file)
+            # Extract roots from position (slot % 8) as per ETH2 spec
+            state_root = f"0x{state.state_roots[state.slot % 8].hex()}"
+            block_root = f"0x{state.block_roots[state.slot % 8].hex()}"
+            return state_root, block_root
     except Exception as e:
-        raise click.ClickException(f"Failed to extract historical roots from {historical_state_file}: {e}")
+        raise click.ClickException(f"Failed to extract historical roots from {historical_file}: {e}")
 
 
 def setup_logging(verbose: bool = False):
@@ -123,7 +152,7 @@ def cli(ctx, verbose: bool, api_url: Optional[str]):
 @cli.command()
 @click.argument('validator_index', type=int)
 @click.option('--json-file', type=str, help='Path to current beacon state JSON file')
-@click.option('--historical-state-file', type=str, help='Path to historical beacon state JSON file (8 slots ago). Alternative to --prev-state-root/--prev-block-root')
+@click.option('--historical-state-file', type=str, help='Path to historical beacon state JSON file or header JSON file (8 slots ago). Alternative to --prev-state-root/--prev-block-root')
 @click.option('--slot', type=int, help='Slot number for API queries (defaults to head)')
 @click.option('--prev-state-root', type=str, help='Previous state root from 8 slots ago (hex string). Ignored if --historical-state-file is provided')
 @click.option('--prev-block-root', type=str, help='Previous block root from 8 slots ago (hex string). Ignored if --historical-state-file is provided')
@@ -236,7 +265,7 @@ def validator(validator_index: int, json_file: str = None, historical_state_file
 @cli.command()
 @click.argument('validator_index', type=int)
 @click.option('--json-file', type=str, help='Path to current beacon state JSON file')
-@click.option('--historical-state-file', type=str, help='Path to historical beacon state JSON file (8 slots ago). Alternative to --prev-state-root/--prev-block-root')
+@click.option('--historical-state-file', type=str, help='Path to historical beacon state JSON file or header JSON file (8 slots ago). Alternative to --prev-state-root/--prev-block-root')
 @click.option('--slot', type=int, help='Slot number for API queries (defaults to head)')
 @click.option('--prev-state-root', type=str, help='Previous state root from 8 slots ago (hex string). Ignored if --historical-state-file is provided')
 @click.option('--prev-block-root', type=str, help='Previous block root from 8 slots ago (hex string). Ignored if --historical-state-file is provided')
