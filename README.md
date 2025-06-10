@@ -1,157 +1,73 @@
 # bera-proofs
 
-**Berachain Merkle Proof Generator** - A standalone library for generating merkle proofs from BeaconState JSON data provided by Berachain's beacon node API endpoint `bkit/v1/proof/block_proposer/:timestamp_id`.
+**Berachain Merkle Proof Generator** - Generate merkle proofs from BeaconState JSON data for Berachain's beacon-kit implementation.
 
 ## 🎯 Purpose
 
 Sufficient discrepancies exist between Berachain's beacon-kit implementation and the ETH2 specification that this standalone library was needed to generate compatible merkle proofs. This library ensures accurate proof generation that matches Berachain's specific SSZ implementation.
 
-## 🔧 Installation & Setup
-
-### Prerequisites
-- Python 3.8+
-- Poetry (recommended) or pip
-
-### Installation
+## 🔧 Installation
 
 ```bash
-# Clone the repository
 git clone <repository-url>
 cd bera-proofs
-
-# Install dependencies with Poetry (recommended)
 poetry install
-
-# Or with pip
-pip install -r requirements.txt
-
-# Verify installation with tests (see Testing section below)
-poetry run python tests/run_tests.py
 ```
 
 ## 🚀 Quick Start
 
-### Generate a Merkle Proof
+Generate proofs using historical state files (recommended):
 
 ```bash
-# Using Poetry
-poetry run python src/main.py
+# Validator proof
+poetry run python -m src.cli validator 0 \
+  --json-file current_state.json \
+  --historical-state-file historical_state.json
 
-# Direct Python execution
-python3 src/main.py
+# Balance proof  
+poetry run python -m src.cli balance 0 \
+  --json-file current_state.json \
+  --historical-state-file historical_state.json
 ```
 
-## 🌐 REST API Server
+## 📖 Documentation
 
-Bera Proofs includes a REST API server for generating Merkle proofs via HTTP endpoints.
-
-### Starting the API Server
+For detailed options and parameters:
 
 ```bash
-# Start server on localhost:8000
-poetry run python -m src.cli serve
-
-# Custom host and port
-poetry run python -m src.cli serve --host 0.0.0.0 --port 8080
+poetry run python -m src.cli validator --help
+poetry run python -m src.cli balance --help
 ```
 
-### API Endpoints
-
-#### **Health Check**
-```bash
-GET /health
-```
-
-#### **Proof Generation**
-All proof endpoints return the same JSON structure with proof steps, root hash, and metadata.
+## 🌐 REST API
 
 ```bash
-# Generate validator proof
-GET /proofs/validator/{validator_index}?slot=head&json_file=path/to/state.json
-
-# Generate balance proof  
-GET /proofs/balance/{validator_index}?slot=head&json_file=path/to/state.json
-
-# Generate proposer proof
-GET /proofs/proposer/{validator_index}?slot=head&json_file=path/to/state.json
-
-# 🆕 With explicit historical roots
-GET /proofs/validator/{validator_index}?slot=head&json_file=path/to/state.json&prev_state_root=0x...&prev_block_root=0x...
-
-# 🆕 With auto-fetching from beacon API
-GET /proofs/validator/{validator_index}?slot=head&json_file=path/to/state.json&auto_fetch_historical=true
-```
-
-**Query Parameters:**
-- `slot`: Beacon chain slot (default: "head")
-- `json_file`: Path to BeaconState JSON file
-- `prev_state_root`: *(optional)* Previous state root for historical data (32-byte hex)
-- `prev_block_root`: *(optional)* Previous block root for historical data (32-byte hex)  
-- `auto_fetch_historical`: *(optional)* Auto-fetch historical roots from beacon API (boolean)
-
-**Response Format:**
-```json
-{
-  "proof": ["0x...", "0x...", ...],
-  "root": "0xe0aaed9422b2e3fa8c56a0114289ef05155e1ace9faa970c8c9bfc9fb46f97e0",
-  "validator_index": 0,
-  "slot": "head", 
-  "proof_type": "validator|balance|proposer",
-  "metadata": { "proof_length": 45, "..." }
-}
-```
-
-### Configuration
-
-Configure via `.env` file:
-```bash
-BEACON_RPC_URL=http://35.246.217.85:3500
-API_HOST=0.0.0.0
-API_PORT=8000
-```
-
-## 🖥️ Command Line Interface
-
-### Basic Usage
-
-```bash
-# Generate proofs (returns JSON)
-poetry run python -m src.cli validator 0 --json-file test/data/state.json
-poetry run python -m src.cli balance 0 --json-file test/data/state.json  
-poetry run python -m src.cli proposer 0 --json-file test/data/state.json
-
-# Inspect beacon state
-poetry run python -m src.cli inspect test/data/state.json
-
 # Start API server
 poetry run python -m src.cli serve
+
+# Health check
+curl http://localhost:8000/health
+
+# Generate proofs
+curl "http://localhost:8000/proofs/validator/0?json_file=state.json"
+curl "http://localhost:8000/proofs/balance/0?json_file=state.json"
 ```
 
-### 🆕 Historical Data Parameters
-
-All proof generation commands now support optional historical data parameters for dynamic root handling:
+## 🧪 Testing
 
 ```bash
-# Generate proofs with explicit historical roots
-poetry run python -m src.cli validator 0 \
-  --json-file test/data/state.json \
-  --prev-state-root 0x01ef6767e8908883d1e84e91095bbb3f7d98e33773d13b6cc949355909365ff8 \
-  --prev-block-root 0x28925c02852c6462577e73cc0fdb0f49bbf910b559c8c0d1b8f69cac38fa3f74
-
-# Auto-fetch historical data from beacon API (requires BEACON_RPC_URL)
-poetry run python -m src.cli validator 0 \
-  --json-file test/data/state.json \
-  --auto-fetch
-
-# Same options available for balance and proposer commands
-poetry run python -m src.cli balance 0 --json-file test/data/state.json --auto-fetch
-poetry run python -m src.cli proposer 0 --json-file test/data/state.json --auto-fetch
+poetry run python tests/run_tests.py
 ```
 
-**Historical Data Options:**
-- `--prev-state-root`: Explicit previous state root (32-byte hex, with or without 0x prefix)
-- `--prev-block-root`: Explicit previous block root (32-byte hex, with or without 0x prefix)
-- `--auto-fetch`: Automatically fetch historical roots from beacon API using the current slot
+## 📄 License
+
+MIT
+
+## 🔗 Related Resources
+
+- [Berachain Documentation](https://docs.berachain.com/)
+- [ETH2 SSZ Specification](https://github.com/ethereum/consensus-specs/blob/dev/ssz/simple-serialize.md)
+- [Beacon Kit Implementation](https://github.com/berachain/beacon-kit)
 
 ## 🌳 Merkle Tree Visualization
 
@@ -278,80 +194,3 @@ bera-proofs/
 │   ├── test_integration.py
 │   └── run_tests.py
 └── README.md
-```
-
-## 📄 License
-
-MIT
-
-## 🔗 Related Resources
-
-- [Berachain Documentation](https://docs.berachain.com/)
-- [ETH2 SSZ Specification](https://github.com/ethereum/consensus-specs/blob/dev/ssz/simple-serialize.md)
-- [Beacon Kit Implementation](https://github.com/berachain/beacon-kit)
-
-## 🧪 Testing
-
-The repository includes a comprehensive test suite to verify functionality and compatibility.
-
-### Running Tests
-
-#### **Recommended: Custom Test Runner**
-```bash
-# Run all tests with detailed output and summary
-poetry run python tests/run_tests.py
-```
-
-#### **Standard Python unittest**
-```bash
-# Run all tests
-poetry run python -m unittest discover tests -v
-
-# Run specific test modules
-poetry run python -m unittest tests.test_integration -v
-poetry run python -m unittest tests.test_refactored_compatibility -v
-```
-
-#### **API Integration Tests**
-```bash
-# Test the REST API (requires API server to be running)
-poetry run python tests/simple_integration_test.py
-```
-
-### Test Suite Overview
-
-The test suite consists of **23 comprehensive tests** across multiple categories:
-
-#### **Integration Tests** (`tests/test_integration.py`)
-- **3 tests** validating end-to-end proof generation workflows
-- Tests complete validator proof generation with expected outputs
-- Validates proof generation across different validator indices
-- Tests error handling for invalid inputs
-
-#### **Compatibility Tests** (`tests/test_refactored_compatibility.py`)
-- **20 tests** ensuring SSZ implementation compatibility
-- Validates serialization functions (uint64, uint256, boolean, bytes)
-- Tests merkle root calculations for various data structures
-- Verifies JSON-to-class conversion functionality
-- Tests container merkleization (Fork, BeaconState)
-- Validates module imports and accessibility
-
-#### **API Integration Tests** (`tests/simple_integration_test.py`)
-- **5 tests** validating REST API functionality
-- Tests all proof generation endpoints (validator, balance, proposer)
-- Validates API response format and structure
-- Requires API server to be running
-
-### Expected Test Output
-
-When all tests pass, you should see:
-```
-🎉 ALL TESTS PASSED! 🎉
-The refactored SSZ library is fully compatible with the original implementation.
-
-OVERALL TEST SUMMARY
-Total Tests Run: 23
-Successful: 23
-Failed: 0
-Errors: 0
-Skipped: 0

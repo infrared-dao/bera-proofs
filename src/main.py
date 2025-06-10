@@ -1,32 +1,32 @@
 """
-Refactored Main Module
+Bera Proofs - Main proof generation module
 
-This module provides flexible proof generation functions that can be used
-by both CLI and API interfaces. Supports validator, balance, and proposer proofs.
+This module contains the core functions for generating Merkle proofs from BeaconState data
+by both CLI and API interfaces. Supports validator and balance proofs.
 """
 
-import math
-from typing import List, Tuple, Optional, Dict, Any
-from dataclasses import dataclass
 import json
+import logging
+import math
+from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
 
-# Import from local ssz module
 from .ssz import (
-    VALIDATOR_REGISTRY_LIMIT,
-    BeaconState,
+    BeaconState, 
     Validator,
     ValidatorBalance,
     load_and_process_state,
-    merkle_root_basic,
     merkle_root_element,
-    merkle_root_ssz_list,
-    build_merkle_tree,
-    merkle_list_tree,
+    merkle_root_basic,
+    get_proof,
     get_fixed_capacity_proof,
     compute_root_from_proof,
-    get_proof
+    build_merkle_tree,
+    merkle_list_tree,
+    VALIDATOR_REGISTRY_LIMIT
 )
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class ProofResult:
@@ -38,7 +38,7 @@ class ProofResult:
 
 def generate_validator_proof(state_file: str, validator_index: int, 
                            prev_state_root: Optional[str] = None, 
-                           prev_block_root: Optional[str] = None) -> Dict[str, Any]:
+                           prev_block_root: Optional[str] = None) -> ProofResult:
     """Generate a Merkle proof for a validator."""
     state = load_and_process_state(state_file)
     
@@ -61,254 +61,12 @@ def generate_validator_proof(state_file: str, validator_index: int,
     if validator_index >= len(state.validators):
         raise ValueError(f"Validator index {validator_index} out of range (max: {len(state.validators)-1})")
     
-    # Prepare state for merkleization (reset state root as in original code)
-    state.latest_block_header.state_root = int(0).to_bytes(32)
-    
-    # Apply historical data modifications (8 slots ago as per spec)
-    state.state_roots[2] = prev_state_root_bytes
-    state.block_roots[2] = prev_block_root_bytes
-    
-    # Generate validator proof within the validators list
-    validator_elements = [merkle_root_element(v, "Validator") for v in state.validators]
-    
-    # Compute validators root directly (matching working implementation)
-    validators_root = merkle_root_ssz_list(
-        state.validators, "Validator", VALIDATOR_REGISTRY_LIMIT
-    )
-    
-    val_proof = get_fixed_capacity_proof(
-        validator_elements, 
-        validator_index, 
-        VALIDATOR_REGISTRY_LIMIT
-    )
-    
-    # Add length mixing for the validators list
-    length_chunk = len(validator_elements).to_bytes(32, "little")
-    val_proof.append(length_chunk)
-    
-    # Recompute validators root using the proof (matching working implementation)
-    leaf = validator_elements[validator_index]
-    validators_root = compute_root_from_proof(
-        leaf, validator_index, val_proof
-    )
-    
-    # Generate state proof for the validators field (field index 9)
-    state_proof = _generate_state_proof(state, field_index=9, prev_state_root=prev_state_root_bytes, prev_block_root=prev_block_root_bytes)
-    
-    # Combine proofs
-    full_proof = val_proof + state_proof
-    
-    # Get state root
-    state_root = _compute_state_root(state, validators_root)
-    
-    # Get the validator object
-    validator = state.validators[validator_index]
-    
-    # Get the validator leaf (merkle root)
-    validator_leaf = validator.merkle_root()
-    
-    # Create ValidatorBalance container
-    validator_balance = ValidatorBalance(
-        validator=validator,
-        balance=state.balances[validator_index]
-    )
-    
-    metadata = {
-        "proof_length": len(full_proof),
-        "validator_count": len(state.validators),
-        "validator_index": validator_index,
-        "validator_pubkey": validator.pubkey.hex(),
-        "validator_leaf": validator_leaf.hex(),
-        "validator_balance_root": validator_balance.merkle_root().hex(),
-        "validator": {
-            "pubkey": validator.pubkey.hex(),
-            "withdrawal_credentials": validator.withdrawal_credentials.hex(),
-            "effective_balance": validator.effective_balance,
-            "slashed": validator.slashed,
-            "activation_eligibility_epoch": validator.activation_eligibility_epoch,
-            "activation_epoch": validator.activation_epoch,
-            "exit_epoch": validator.exit_epoch,
-            "withdrawable_epoch": validator.withdrawable_epoch
-        },
-        "beacon_block_header": {
-            "slot": state.latest_block_header.slot,
-            "proposer_index": state.latest_block_header.proposer_index,
-            "parent_root": state.latest_block_header.parent_root.hex(),
-            "state_root": state.latest_block_header.state_root.hex(),
-            "body_root": state.latest_block_header.body_root.hex()
-        },
-        "slot": state.slot,
-        "field_index": 9,  # validators field
-        "prev_state_root": prev_state_root_bytes.hex(),
-        "prev_block_root": prev_block_root_bytes.hex()
-    }
-    
-    return ProofResult(full_proof, state_root, metadata)
-
-
-def generate_balance_proof(state_file: str, validator_index: int,
-                         prev_state_root: Optional[str] = None,
-                         prev_block_root: Optional[str] = None) -> Dict[str, Any]:
-    """Generate a Merkle proof for a validator balance."""
-    state = load_and_process_state(state_file)
-    
-    # Convert string parameters to bytes if provided
-    prev_state_root_bytes = None
-    prev_block_root_bytes = None
-    
-    if prev_state_root is not None:
-        prev_state_root_bytes = bytes.fromhex(prev_state_root.replace('0x', ''))
-    if prev_block_root is not None:
-        prev_block_root_bytes = bytes.fromhex(prev_block_root.replace('0x', ''))
-    
-    # Use existing values from position 2 if not provided (fallback for compatibility)
-    if prev_state_root_bytes is None:
-        prev_state_root_bytes = state.state_roots[2]
-    if prev_block_root_bytes is None:
-        prev_block_root_bytes = state.block_roots[2]
-    
-    # Validate validator index
-    if validator_index >= len(state.balances):
-        raise ValueError(f"Balance index {validator_index} out of range (max: {len(state.balances)-1})")
-    
     # Prepare state for merkleization
     state.latest_block_header.state_root = int(0).to_bytes(32)
     
     # Apply historical data modifications (8 slots ago as per spec)
     state.state_roots[2] = prev_state_root_bytes
     state.block_roots[2] = prev_block_root_bytes
-    
-    # Generate balance proof within the balances list
-    balance_elements = [merkle_root_basic(balance, "uint64") for balance in state.balances]
-    bal_proof = get_fixed_capacity_proof(
-        balance_elements,
-        validator_index,
-        VALIDATOR_REGISTRY_LIMIT  # Same capacity as validators
-    )
-    
-    # Add length mixing for the balances list
-    length_chunk = len(balance_elements).to_bytes(32, "little")
-    bal_proof.append(length_chunk)
-    
-    # Recompute validators root for consistency (even though we're proving balances)
-    validator_elements = [merkle_root_element(v, "Validator") for v in state.validators]
-    validators_root = merkle_root_ssz_list(
-        state.validators, "Validator", VALIDATOR_REGISTRY_LIMIT
-    )
-    val_proof_temp = get_fixed_capacity_proof(
-        validator_elements, 
-        validator_index, 
-        VALIDATOR_REGISTRY_LIMIT
-    )
-    length_chunk_temp = len(validator_elements).to_bytes(32, "little")
-    val_proof_temp.append(length_chunk_temp)
-    leaf = validator_elements[validator_index]
-    validators_root = compute_root_from_proof(
-        leaf, validator_index, val_proof_temp
-    )
-    
-    # Generate state proof for the balances field (field index 10)
-    state_proof = _generate_state_proof(state, field_index=10, prev_state_root=prev_state_root_bytes, prev_block_root=prev_block_root_bytes)
-    
-    # Combine proofs
-    full_proof = bal_proof + state_proof
-    
-    # Get state root
-    state_root = _compute_state_root(state)
-    
-    # Get the validator object for consistency with validator proof
-    validator = state.validators[validator_index]
-    
-    # Create ValidatorBalance container
-    validator_balance = ValidatorBalance(
-        validator=validator,
-        balance=state.balances[validator_index]
-    )
-    
-    metadata = {
-        "proof_length": len(full_proof),
-        "balance": str(state.balances[validator_index]),
-        "validator_index": validator_index,
-        "validator_count": len(state.validators),
-        "validator_balance_root": validator_balance.merkle_root().hex(),
-        "validator": {
-            "pubkey": validator.pubkey.hex(),
-            "withdrawal_credentials": validator.withdrawal_credentials.hex(),
-            "effective_balance": validator.effective_balance,
-            "slashed": validator.slashed,
-            "activation_eligibility_epoch": validator.activation_eligibility_epoch,
-            "activation_epoch": validator.activation_epoch,
-            "exit_epoch": validator.exit_epoch,
-            "withdrawable_epoch": validator.withdrawable_epoch
-        },
-        "beacon_block_header": {
-            "slot": state.latest_block_header.slot,
-            "proposer_index": state.latest_block_header.proposer_index,
-            "parent_root": state.latest_block_header.parent_root.hex(),
-            "state_root": state.latest_block_header.state_root.hex(),
-            "body_root": state.latest_block_header.body_root.hex()
-        },
-        "slot": state.slot,
-        "field_index": 10,  # balances field
-        "prev_state_root": prev_state_root_bytes.hex(),
-        "prev_block_root": prev_block_root_bytes.hex()
-    }
-    
-    return ProofResult(full_proof, state_root, metadata)
-
-
-def generate_proposer_proof(state_file: str, validator_index: int,
-                          prev_state_root: Optional[str] = None,
-                          prev_block_root: Optional[str] = None) -> Dict[str, Any]:
-    """Generate a Merkle proof for a proposer."""
-    state = load_and_process_state(state_file)
-    
-    # Convert string parameters to bytes if provided
-    prev_state_root_bytes = None
-    prev_block_root_bytes = None
-    
-    if prev_state_root is not None:
-        prev_state_root_bytes = bytes.fromhex(prev_state_root.replace('0x', ''))
-    if prev_block_root is not None:
-        prev_block_root_bytes = bytes.fromhex(prev_block_root.replace('0x', ''))
-    
-    # Use existing values from position 2 if not provided (fallback for compatibility)
-    if prev_state_root_bytes is None:
-        prev_state_root_bytes = state.state_roots[2]
-    if prev_block_root_bytes is None:
-        prev_block_root_bytes = state.block_roots[2]
-    
-    # Validate validator index
-    if validator_index >= len(state.validators):
-        raise ValueError(f"Validator index {validator_index} out of range (max: {len(state.validators)-1})")
-    
-    # Prepare state for merkleization
-    state.latest_block_header.state_root = int(0).to_bytes(32)
-    
-    # Apply historical data modifications (8 slots ago as per spec)
-    state.state_roots[2] = prev_state_root_bytes
-    state.block_roots[2] = prev_block_root_bytes
-    
-    # Generate pubkey proof within the validator (field index 0)
-    validator = state.validators[validator_index]
-    validator_field_roots = [
-        merkle_root_basic(validator.pubkey, "bytes48"),  # field 0
-        merkle_root_basic(validator.withdrawal_credentials, "bytes32"),  # field 1
-        merkle_root_basic(validator.effective_balance, "uint64"),  # field 2
-        merkle_root_basic(validator.slashed, "Boolean"),  # field 3
-        merkle_root_basic(validator.activation_eligibility_epoch, "uint64"),  # field 4
-        merkle_root_basic(validator.activation_epoch, "uint64"),  # field 5
-        merkle_root_basic(validator.exit_epoch, "uint64"),  # field 6
-        merkle_root_basic(validator.withdrawable_epoch, "uint64"),  # field 7
-    ]
-    
-    # Pad validator fields to next power of 2 and build tree
-    n = len(validator_field_roots)
-    k = math.ceil(math.log2(max(n, 1)))
-    num_leaves = 1 << k
-    padded_fields = validator_field_roots + [b"\0" * 32] * (num_leaves - n)
-    validator_tree = build_merkle_tree(padded_fields)
-    pubkey_proof = get_proof(validator_tree, 0)
     
     # Generate validator proof within the validators list
     validator_elements = [merkle_root_element(v, "Validator") for v in state.validators]
@@ -331,28 +89,11 @@ def generate_proposer_proof(state_file: str, validator_index: int,
     # Generate state proof for validators field (field index 9)
     state_proof = _generate_state_proof(state, field_index=9, prev_state_root=prev_state_root_bytes, prev_block_root=prev_block_root_bytes)
     
-    # Generate header proof for state_root field (field index 3 in BeaconBlockHeader)
-    header_field_roots = [
-        merkle_root_basic(state.latest_block_header.slot, "uint64"),  # field 0
-        merkle_root_basic(state.latest_block_header.proposer_index, "uint64"),  # field 1
-        merkle_root_basic(state.latest_block_header.parent_root, "bytes32"),  # field 2
-        merkle_root_basic(state.latest_block_header.state_root, "bytes32"),  # field 3
-        merkle_root_basic(state.latest_block_header.body_root, "bytes32"),  # field 4
-    ]
-    
-    # Pad header fields and build tree
-    n = len(header_field_roots)
-    k = math.ceil(math.log2(max(n, 1)))
-    num_leaves = 1 << k
-    padded_header_fields = header_field_roots + [b"\0" * 32] * (num_leaves - n)
-    header_tree = build_merkle_tree(padded_header_fields)
-    header_proof = get_proof(header_tree, 3)  # state_root at index 3
-    
     # Combine all proofs
-    full_proof = pubkey_proof + val_proof + state_proof + header_proof
+    full_proof = val_proof + state_proof
     
-    # Return latest_block_header root for proposer proofs
-    header_root = header_tree[-1][0]
+    # Compute final state root (matching working approach)
+    state_root = _compute_state_root(state, validators_root)
     
     # Get the validator object
     validator = state.validators[validator_index]
@@ -372,7 +113,6 @@ def generate_proposer_proof(state_file: str, validator_index: int,
         "validator_pubkey": validator.pubkey.hex(),
         "validator_leaf": validator_leaf.hex(),
         "validator_balance_root": validator_balance.merkle_root().hex(),
-        "proposer_index": state.latest_block_header.proposer_index,
         "validator": {
             "pubkey": validator.pubkey.hex(),
             "withdrawal_credentials": validator.withdrawal_credentials.hex(),
@@ -383,19 +123,104 @@ def generate_proposer_proof(state_file: str, validator_index: int,
             "exit_epoch": validator.exit_epoch,
             "withdrawable_epoch": validator.withdrawable_epoch
         },
-        "beacon_block_header": {
-            "slot": state.latest_block_header.slot,
-            "proposer_index": state.latest_block_header.proposer_index,
-            "parent_root": state.latest_block_header.parent_root.hex(),
-            "state_root": state.latest_block_header.state_root.hex(),
-            "body_root": state.latest_block_header.body_root.hex()
+        "slot": state.slot,
+        "prev_state_root": prev_state_root_bytes.hex(),
+        "prev_block_root": prev_block_root_bytes.hex()
+    }
+    
+    return ProofResult(full_proof, state_root, metadata)
+
+
+def generate_balance_proof(state_file: str, validator_index: int,
+                         prev_state_root: Optional[str] = None,
+                         prev_block_root: Optional[str] = None) -> ProofResult:
+    """Generate a Merkle proof for a validator balance."""
+    state = load_and_process_state(state_file)
+    
+    # Convert string parameters to bytes if provided
+    prev_state_root_bytes = None
+    prev_block_root_bytes = None
+    
+    if prev_state_root is not None:
+        prev_state_root_bytes = bytes.fromhex(prev_state_root.replace('0x', ''))
+    if prev_block_root is not None:
+        prev_block_root_bytes = bytes.fromhex(prev_block_root.replace('0x', ''))
+    
+    # Use existing values from position 2 if not provided (fallback for compatibility)
+    if prev_state_root_bytes is None:
+        prev_state_root_bytes = state.state_roots[2]
+    if prev_block_root_bytes is None:
+        prev_block_root_bytes = state.block_roots[2]
+    
+    # Validate validator index
+    if validator_index >= len(state.balances):
+        raise ValueError(f"Validator index {validator_index} out of range (max: {len(state.balances)-1})")
+    
+    # Prepare state for merkleization
+    state.latest_block_header.state_root = int(0).to_bytes(32)
+    
+    # Apply historical data modifications (8 slots ago as per spec)
+    state.state_roots[2] = prev_state_root_bytes
+    state.block_roots[2] = prev_block_root_bytes
+    
+    # Generate balance proof within the balances list
+    balance_elements = [merkle_root_basic(balance, "uint64") for balance in state.balances]
+    balance_proof = get_fixed_capacity_proof(
+        balance_elements,
+        validator_index,
+        VALIDATOR_REGISTRY_LIMIT
+    )
+    
+    # Add length mixing
+    length_chunk = len(balance_elements).to_bytes(32, "little")
+    balance_proof.append(length_chunk)
+    
+    # Recompute balances root using the proof (matching working implementation)
+    leaf = balance_elements[validator_index]
+    balances_root = compute_root_from_proof(
+        leaf, validator_index, balance_proof
+    )
+    
+    # Generate state proof for balances field (field index 10)
+    state_proof = _generate_state_proof(state, field_index=10, prev_state_root=prev_state_root_bytes, prev_block_root=prev_block_root_bytes)
+    
+    # Combine all proofs
+    full_proof = balance_proof + state_proof
+    
+    # Compute final state root
+    state_root = _compute_state_root(state)
+    
+    # Get balance and validator
+    balance = state.balances[validator_index]
+    validator = state.validators[validator_index]
+    
+    # Create ValidatorBalance container
+    validator_balance = ValidatorBalance(
+        validator=validator,
+        balance=balance
+    )
+    
+    metadata = {
+        "proof_length": len(full_proof),
+        "validator_index": validator_index,
+        "balance": str(balance),
+        "validator_balance_root": validator_balance.merkle_root().hex(),
+        "validator": {
+            "pubkey": validator.pubkey.hex(),
+            "withdrawal_credentials": validator.withdrawal_credentials.hex(),
+            "effective_balance": validator.effective_balance,
+            "slashed": validator.slashed,
+            "activation_eligibility_epoch": validator.activation_eligibility_epoch,
+            "activation_epoch": validator.activation_epoch,
+            "exit_epoch": validator.exit_epoch,
+            "withdrawable_epoch": validator.withdrawable_epoch
         },
         "slot": state.slot,
         "prev_state_root": prev_state_root_bytes.hex(),
         "prev_block_root": prev_block_root_bytes.hex()
     }
     
-    return ProofResult(full_proof, header_root, metadata)
+    return ProofResult(full_proof, state_root, metadata)
 
 
 def _generate_state_proof(
@@ -424,8 +249,6 @@ def _generate_state_proof(
     # Build state tree and get proof
     state_tree = build_merkle_tree(state_fields)
     return get_proof(state_tree, field_index)
-
-
 
 
 def _compute_state_root(state: BeaconState, validators_root: Optional[bytes] = None) -> bytes:

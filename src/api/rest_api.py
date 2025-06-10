@@ -2,7 +2,7 @@
 REST API for Bera Proofs
 
 This module provides a FastAPI-based REST API for generating Merkle proofs
-for validators, balances, and proposers with full OpenAPI documentation.
+for validators and balances with full OpenAPI documentation.
 """
 
 import logging
@@ -23,9 +23,7 @@ from ..models.api_models import (
     ValidatorProofRequest,
     ValidatorProofResponse,
     BalanceProofRequest, 
-    BalanceProofResponse,
-    ProposerProofRequest,
-    ProposerProofResponse
+    BalanceProofResponse
 )
 
 # Configure logging
@@ -36,7 +34,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Bera Proofs API",
     description="""
-    Generate Merkle proofs for Berachain beacon state validators, balances, and proposers.
+    Generate Merkle proofs for Berachain beacon state validators and balances.
     
     This API provides endpoints to generate cryptographic proofs that allow verification
     of specific validator data against the beacon chain state root without requiring
@@ -45,7 +43,6 @@ app = FastAPI(
     ## Features
     - **Validator Proofs**: Prove a validator exists in the state
     - **Balance Proofs**: Prove a validator's balance
-    - **Proposer Proofs**: Prove a validator's pubkey for block proposing
     - **Live API Integration**: Fetch fresh data from beacon chain
     - **JSON Fallback**: Support for offline operation with JSON files
     
@@ -254,53 +251,6 @@ async def generate_balance_proof(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/proofs/proposer", response_model=ProposerProofResponse)
-async def generate_proposer_proof(
-    request: ProposerProofRequest,
-    service: ProofService = Depends(get_proof_service)
-):
-    """
-    Generate a block proposer proof.
-    
-    Generates a comprehensive Merkle proof that proves a validator's
-    public key, suitable for verifying block proposer signatures.
-    This is the most complex proof type.
-    
-    **Proof Structure:**
-    - Pubkey proof within the validator object
-    - Validator proof within the validators list  
-    - State proof for the validators field
-    - Header proof for the state root
-    
-    **Use Cases:**
-    - Verify block proposer identity
-    - Validate block signatures
-    - Prove validator authority for consensus
-    """
-    try:
-        result: ProofResult = service.get_proposer_proof(
-            val_index=request.val_index,
-            slot=request.slot, 
-            json_file=request.json_file or ""
-        )
-        
-        # Convert bytes to hex strings for JSON response
-        proof_hex = [f"0x{step.hex()}" for step in result.proof]
-        
-        return ProposerProofResponse(
-            proof=proof_hex,
-            root=f"0x{result.root.hex()}",
-            validator_index=request.val_index,
-            slot=request.slot,
-            proof_type="proposer",
-            metadata=result.metadata
-        )
-        
-    except Exception as e:
-        logger.error(f"Proposer proof generation failed: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-
 @app.get("/proofs/validator/{val_index}")
 async def generate_validator_proof_get(
     val_index: int,
@@ -339,26 +289,6 @@ async def generate_balance_proof_get(
         json_file=json_file
     )
     return await generate_balance_proof(request, service)
-
-
-@app.get("/proofs/proposer/{val_index}")
-async def generate_proposer_proof_get(
-    val_index: int,
-    slot: str = "head",
-    json_file: Optional[str] = None,
-    service: ProofService = Depends(get_proof_service)
-):
-    """
-    Generate proposer proof via GET request.
-    
-    Convenience endpoint for simple proposer proof generation.
-    """
-    request = ProposerProofRequest(
-        val_index=val_index,
-        slot=slot,
-        json_file=json_file
-    )
-    return await generate_proposer_proof(request, service)
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8000, dev: bool = False):

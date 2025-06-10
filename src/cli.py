@@ -10,7 +10,7 @@ import os
 import sys
 import json
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 import click
 from rich.console import Console
 from rich.table import Table
@@ -27,11 +27,31 @@ from src.api.beacon_client import BeaconAPIClient, BeaconAPIError
 from src.api.rest_api import run_server
 from src.visualize_merkle import visualize_merkle_proof, demo_visualization
 from src.ssz.containers.utils import load_and_process_state
-from src.main import generate_validator_proof, generate_balance_proof, generate_proposer_proof
+from src.main import generate_validator_proof, generate_balance_proof
 
 # Configure rich console
 console = Console()
 logger = logging.getLogger(__name__)
+
+
+def extract_historical_roots_from_file(historical_state_file: str) -> Tuple[str, str]:
+    """
+    Extract state and block roots from a historical state file.
+    
+    Args:
+        historical_state_file: Path to the historical state JSON file
+        
+    Returns:
+        Tuple of (state_root, block_root) as hex strings with 0x prefix
+    """
+    try:
+        state = load_and_process_state(historical_state_file)
+        # Extract roots from position 2 (slot % 8)
+        state_root = f"0x{state.state_roots[2].hex()}"
+        block_root = f"0x{state.block_roots[2].hex()}"
+        return state_root, block_root
+    except Exception as e:
+        raise click.ClickException(f"Failed to extract historical roots from {historical_state_file}: {e}")
 
 
 def setup_logging(verbose: bool = False):
@@ -102,19 +122,41 @@ def cli(ctx, verbose: bool, api_url: Optional[str]):
 
 @cli.command()
 @click.argument('validator_index', type=int)
-@click.option('--json-file', type=str, help='Path to JSON state file')
+@click.option('--json-file', type=str, help='Path to current beacon state JSON file')
+@click.option('--historical-state-file', type=str, help='Path to historical beacon state JSON file (8 slots ago). Alternative to --prev-state-root/--prev-block-root')
 @click.option('--slot', type=int, help='Slot number for API queries (defaults to head)')
-@click.option('--prev-state-root', type=str, help='Previous state root from 8 slots ago (hex string)')
-@click.option('--prev-block-root', type=str, help='Previous block root from 8 slots ago (hex string)')
-@click.option('--auto-fetch', is_flag=True, default=True, help='Auto-fetch historical data if not provided')
-def validator(validator_index: int, json_file: str = None, slot: int = None, 
+@click.option('--prev-state-root', type=str, help='Previous state root from 8 slots ago (hex string). Ignored if --historical-state-file is provided')
+@click.option('--prev-block-root', type=str, help='Previous block root from 8 slots ago (hex string). Ignored if --historical-state-file is provided')
+@click.option('--auto-fetch', is_flag=True, default=True, help='Auto-fetch historical data from API if not provided via other options')
+def validator(validator_index: int, json_file: str = None, historical_state_file: str = None, slot: int = None, 
               prev_state_root: str = None, prev_block_root: str = None, auto_fetch: bool = True):
     """
     Generate a validator existence proof.
     
     VALIDATOR_INDEX: Index of the validator to prove
+    
+    Historical Data Options (choose one):
+    
+    1. --historical-state-file: Provide a state file from 8 slots ago
+       Example: --historical-state-file historical_state.json
+    
+    2. --prev-state-root and --prev-block-root: Provide explicit hex values
+       Example: --prev-state-root 0x123... --prev-block-root 0x456...
+    
+    3. --auto-fetch: Let the tool fetch historical data from the beacon API
+       (Default behavior when using API mode)
     """
     try:
+        # Handle historical data precedence: file > explicit roots > auto-fetch
+        if historical_state_file:
+            if not json_file:
+                raise click.ClickException("--historical-state-file requires --json-file to be specified")
+            
+            console.print(f"[cyan]Extracting historical roots from {historical_state_file}[/cyan]")
+            prev_state_root, prev_block_root = extract_historical_roots_from_file(historical_state_file)
+            console.print(f"[green]Extracted state_root: {prev_state_root}[/green]")
+            console.print(f"[green]Extracted block_root: {prev_block_root}[/green]")
+        
         if json_file:
             # Use local JSON file directly
             result = generate_validator_proof(json_file, validator_index, prev_state_root, prev_block_root)
@@ -184,19 +226,41 @@ def validator(validator_index: int, json_file: str = None, slot: int = None,
 
 @cli.command()
 @click.argument('validator_index', type=int)
-@click.option('--json-file', type=str, help='Path to JSON state file')
+@click.option('--json-file', type=str, help='Path to current beacon state JSON file')
+@click.option('--historical-state-file', type=str, help='Path to historical beacon state JSON file (8 slots ago). Alternative to --prev-state-root/--prev-block-root')
 @click.option('--slot', type=int, help='Slot number for API queries (defaults to head)')
-@click.option('--prev-state-root', type=str, help='Previous state root from 8 slots ago (hex string)')
-@click.option('--prev-block-root', type=str, help='Previous block root from 8 slots ago (hex string)')
-@click.option('--auto-fetch', is_flag=True, default=True, help='Auto-fetch historical data if not provided')
-def balance(validator_index: int, json_file: str = None, slot: int = None,
+@click.option('--prev-state-root', type=str, help='Previous state root from 8 slots ago (hex string). Ignored if --historical-state-file is provided')
+@click.option('--prev-block-root', type=str, help='Previous block root from 8 slots ago (hex string). Ignored if --historical-state-file is provided')
+@click.option('--auto-fetch', is_flag=True, default=True, help='Auto-fetch historical data from API if not provided via other options')
+def balance(validator_index: int, json_file: str = None, historical_state_file: str = None, slot: int = None,
             prev_state_root: str = None, prev_block_root: str = None, auto_fetch: bool = True):
     """
     Generate a validator balance proof.
     
     VALIDATOR_INDEX: Index of the validator balance to prove
+    
+    Historical Data Options (choose one):
+    
+    1. --historical-state-file: Provide a state file from 8 slots ago
+       Example: --historical-state-file historical_state.json
+    
+    2. --prev-state-root and --prev-block-root: Provide explicit hex values
+       Example: --prev-state-root 0x123... --prev-block-root 0x456...
+    
+    3. --auto-fetch: Let the tool fetch historical data from the beacon API
+       (Default behavior when using API mode)
     """
     try:
+        # Handle historical data precedence: file > explicit roots > auto-fetch
+        if historical_state_file:
+            if not json_file:
+                raise click.ClickException("--historical-state-file requires --json-file to be specified")
+            
+            console.print(f"[cyan]Extracting historical roots from {historical_state_file}[/cyan]")
+            prev_state_root, prev_block_root = extract_historical_roots_from_file(historical_state_file)
+            console.print(f"[green]Extracted state_root: {prev_state_root}[/green]")
+            console.print(f"[green]Extracted block_root: {prev_block_root}[/green]")
+        
         if json_file:
             # Use local JSON file directly
             result = generate_balance_proof(json_file, validator_index, prev_state_root, prev_block_root)
@@ -261,88 +325,6 @@ def balance(validator_index: int, json_file: str = None, slot: int = None,
         
     except Exception as e:
         logger.error(f"Error generating balance proof: {e}")
-        raise click.ClickException(str(e))
-
-
-@cli.command()
-@click.argument('validator_index', type=int)
-@click.option('--json-file', type=str, help='Path to JSON state file')
-@click.option('--slot', type=int, help='Slot number for API queries (defaults to head)')
-@click.option('--prev-state-root', type=str, help='Previous state root from 8 slots ago (hex string)')
-@click.option('--prev-block-root', type=str, help='Previous block root from 8 slots ago (hex string)')
-@click.option('--auto-fetch', is_flag=True, default=True, help='Auto-fetch historical data if not provided')
-def proposer(validator_index: int, json_file: str = None, slot: int = None,
-            prev_state_root: str = None, prev_block_root: str = None, auto_fetch: bool = True):
-    """
-    Generate a block proposer proof.
-    
-    VALIDATOR_INDEX: Index of the validator to prove as proposer
-    """
-    try:
-        if json_file:
-            # Use local JSON file directly
-            result = generate_proposer_proof(json_file, validator_index, prev_state_root, prev_block_root)
-            
-            # Format for JSON output
-            output = {
-                "proof": [f"0x{step.hex()}" for step in result.proof],
-                "root": f"0x{result.root.hex()}",
-                "metadata": {
-                    **result.metadata,
-                    "type": "proposer_proof"
-                }
-            }
-        else:
-            # Use API with optional auto-fetching
-            beacon_client = BeaconAPIClient()
-            slot_id = slot if slot is not None else "head"
-            
-            # If auto-fetch is enabled and historical roots not provided, get them from API
-            if auto_fetch and (prev_state_root is None or prev_block_root is None):
-                try:
-                    # Get current slot for historical calculation
-                    state_response = beacon_client.get_state(slot_id)
-                    current_slot = int(state_response.get('slot', '0'), 16 if isinstance(state_response.get('slot'), str) and state_response.get('slot').startswith('0x') else 10)
-                    
-                    # Fetch historical roots
-                    fetched_state_root, fetched_block_root = beacon_client.get_historical_roots(current_slot)
-                    if prev_state_root is None:
-                        prev_state_root = fetched_state_root
-                    if prev_block_root is None:
-                        prev_block_root = fetched_block_root
-                    
-                    console.print(f"[green]Auto-fetched historical data from slot {current_slot - 8}[/green]")
-                except Exception as e:
-                    console.print(f"[yellow]Warning: Could not auto-fetch historical data: {e}[/yellow]")
-            
-            # Get state data and save to temp file
-            state_response = beacon_client.get_state(slot_id)
-            
-            temp_file = "temp_state.json"
-            with open(temp_file, "w") as f:
-                json.dump(state_response, f)
-            
-            try:
-                result = generate_proposer_proof(temp_file, validator_index, prev_state_root, prev_block_root)
-                
-                # Format for JSON output
-                output = {
-                    "proof": [f"0x{step.hex()}" for step in result.proof],
-                    "root": f"0x{result.root.hex()}",
-                    "metadata": {
-                        **result.metadata,
-                        "type": "proposer_proof"
-                    }
-                }
-            finally:
-                # Clean up temp file
-                if os.path.exists(temp_file):
-                    os.unlink(temp_file)
-        
-        print(format_proof_result(output))
-        
-    except Exception as e:
-        logger.error(f"Error generating proposer proof: {e}")
         raise click.ClickException(str(e))
 
 
@@ -412,7 +394,7 @@ def interactive(ctx):
     
     try:
         # Get proof type
-        proof_types = ["validator", "balance", "proposer", "quit"]
+        proof_types = ["validator", "balance", "quit"]
         while True:
             console.print("\n[bold cyan]Available proof types:[/bold cyan]")
             for i, ptype in enumerate(proof_types, 1):
@@ -446,8 +428,6 @@ def interactive(ctx):
                 result = service.get_validator_proof(validator_index, slot, json_file or "")
             elif selected_type == "balance":
                 result = service.get_balances_proof(validator_index, slot, json_file or "")
-            elif selected_type == "proposer":
-                result = service.get_proposer_proof(validator_index, slot, json_file or "")
             
             print_proof_result(result, selected_type, "table")
             

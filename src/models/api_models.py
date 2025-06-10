@@ -106,11 +106,6 @@ class BalanceProofRequest(ProofRequest):
     pass
 
 
-class ProposerProofRequest(ProofRequest):
-    """Request model specifically for proposer proof generation.""" 
-    pass
-
-
 class ValidatorProofResponse(ProofResponse):
     """Response model specifically for validator proofs."""
     proof_type: str = Field(default="validator", description="Proof type")
@@ -146,26 +141,6 @@ class BalanceProofResponse(ProofResponse):
                 "metadata": {
                     "proof_length": 45,
                     "balance": "32000000000"
-                }
-            }
-        }
-
-
-class ProposerProofResponse(ProofResponse):
-    """Response model specifically for proposer proofs."""
-    proof_type: str = Field(default="proposer", description="Proof type")
-    
-    class Config:
-        schema_extra = {
-            "example": {
-                "proof": ["0x1234...", "0x5678..."],
-                "root": "0xabcd...",
-                "validator_index": 42,
-                "slot": "head",
-                "proof_type": "proposer", 
-                "metadata": {
-                    "proof_length": 75,
-                    "pubkey": "0xa15875a9e554e446..."
                 }
             }
         } 
