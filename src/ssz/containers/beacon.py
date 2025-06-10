@@ -341,10 +341,9 @@ class BeaconState:
         roots.append(self.latest_block_header.merkle_root())
         
         # Reset state root and block root fields to prev cycle
-        # NOTE: Using fixed index 2 to match original implementation
-        # TODO: Verify if this should be slot % BERACHAIN_VECTOR
-        self.state_roots[2] = prev_cycle_state_root
-        self.block_roots[2] = prev_cycle_block_root
+        # As per ETH2 spec: https://eth2book.info/capella/part3/transition/
+        self.state_roots[self.slot % BERACHAIN_VECTOR] = prev_cycle_state_root
+        self.block_roots[self.slot % BERACHAIN_VECTOR] = prev_cycle_block_root
         
         roots.append(encode_block_roots(self.block_roots))
         roots.append(encode_block_roots(self.state_roots))

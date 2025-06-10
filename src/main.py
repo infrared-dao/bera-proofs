@@ -55,11 +55,11 @@ def generate_validator_proof(state_file: str, validator_index: int,
     if prev_block_root is not None:
         prev_block_root_bytes = bytes.fromhex(prev_block_root.replace('0x', ''))
     
-    # Use existing values from position 2 if not provided (fallback for compatibility)
+    # Use existing values from calculated position if not provided (fallback for compatibility)
     if prev_state_root_bytes is None:
-        prev_state_root_bytes = state.state_roots[2]
+        prev_state_root_bytes = state.state_roots[state.slot % 8]
     if prev_block_root_bytes is None:
-        prev_block_root_bytes = state.block_roots[2]
+        prev_block_root_bytes = state.block_roots[state.slot % 8]
     
     # Validate validator index
     if validator_index >= len(state.validators):
@@ -69,8 +69,8 @@ def generate_validator_proof(state_file: str, validator_index: int,
     state.latest_block_header.state_root = int(0).to_bytes(32)
     
     # Apply historical data modifications (8 slots ago as per spec)
-    state.state_roots[2] = prev_state_root_bytes
-    state.block_roots[2] = prev_block_root_bytes
+    state.state_roots[state.slot % 8] = prev_state_root_bytes
+    state.block_roots[state.slot % 8] = prev_block_root_bytes
     
     # Generate validator proof within the validators list
     validator_elements = [v.merkle_root() for v in state.validators]
@@ -152,11 +152,11 @@ def generate_balance_proof(state_file: str, validator_index: int,
     if prev_block_root is not None:
         prev_block_root_bytes = bytes.fromhex(prev_block_root.replace('0x', ''))
     
-    # Use existing values from position 2 if not provided (fallback for compatibility)
+    # Use existing values from calculated position if not provided (fallback for compatibility)
     if prev_state_root_bytes is None:
-        prev_state_root_bytes = state.state_roots[2]
+        prev_state_root_bytes = state.state_roots[state.slot % 8]
     if prev_block_root_bytes is None:
-        prev_block_root_bytes = state.block_roots[2]
+        prev_block_root_bytes = state.block_roots[state.slot % 8]
     
     # Validate validator index
     if validator_index >= len(state.balances):
@@ -166,25 +166,36 @@ def generate_balance_proof(state_file: str, validator_index: int,
     state.latest_block_header.state_root = int(0).to_bytes(32)
     
     # Apply historical data modifications (8 slots ago as per spec)
-    state.state_roots[2] = prev_state_root_bytes
-    state.block_roots[2] = prev_block_root_bytes
+    state.state_roots[state.slot % 8] = prev_state_root_bytes
+    state.block_roots[state.slot % 8] = prev_block_root_bytes
     
     # Generate balance proof within the balances list
-    balance_elements = [merkle_root_basic(balance, "uint64") for balance in state.balances]
+    # Balances are packed 4 per chunk (32 bytes / 8 bytes per uint64)
+    from .ssz.merkle.tree import pack_vector_uint64
+    
+    # Pack all balances into chunks
+    balance_chunks = pack_vector_uint64(state.balances, len(state.balances))
+    
+    # The validator's balance is in chunk at index validator_index // 4
+    chunk_index = validator_index // 4
+    
+    # Calculate the limit for balance chunks
+    limit = (VALIDATOR_REGISTRY_LIMIT * 8 + 31) // 32  # Ceiling division for chunks
+    
     balance_proof = get_fixed_capacity_proof(
-        balance_elements,
-        validator_index,
-        VALIDATOR_REGISTRY_LIMIT
+        balance_chunks,
+        chunk_index,
+        limit
     )
     
     # Add length mixing
-    length_chunk = len(balance_elements).to_bytes(32, "little")
+    length_chunk = len(state.balances).to_bytes(32, "little")
     balance_proof.append(length_chunk)
     
     # Recompute balances root using the proof (matching working implementation)
-    leaf = balance_elements[validator_index]
+    leaf = balance_chunks[chunk_index]
     balances_root = compute_root_from_proof(
-        leaf, validator_index, balance_proof
+        leaf, chunk_index, balance_proof
     )
     
     # Generate state proof for balances field (field index 10)
@@ -263,9 +274,9 @@ def _generate_state_proof(
 def _compute_state_root(state: BeaconState, validators_root: Optional[bytes] = None) -> bytes:
     """Compute the BeaconState merkle root using the state tree approach."""
     # We need to extract the historical roots that were already set
-    # They should be at index 2 (slot % 8 where slot is typically 10, so 10 % 8 = 2)
-    prev_state_root = state.state_roots[2]
-    prev_block_root = state.block_roots[2]
+    # They should be at index (slot % 8) as per ETH2 spec
+    prev_state_root = state.state_roots[state.slot % 8]
+    prev_block_root = state.block_roots[state.slot % 8]
     
     # Use the new serialize method to get all field roots
     state_fields = state.serialize(prev_block_root, prev_state_root, is_electra=False)
@@ -336,8 +347,8 @@ def generate_merkle_witness(
     
     # Set the state root from 8 slots ago (required by Beacon Chain spec)
     state.latest_block_header.state_root = int(0).to_bytes(32)
-    state.state_roots[2] = prev_state_root_bytes
-    state.block_roots[2] = prev_block_root_bytes
+    state.state_roots[state.slot % 8] = prev_state_root_bytes
+    state.block_roots[state.slot % 8] = prev_block_root_bytes
     
     print(f"Using prev_state_root (8 slots ago): {prev_state_root_bytes.hex()}")
     print(f"Using prev_block_root (8 slots ago): {prev_block_root_bytes.hex()}")

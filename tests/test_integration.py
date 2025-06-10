@@ -35,7 +35,7 @@ class TestIntegration(unittest.TestCase):
             self.assertIsNotNone(result.root)
             
             # Verify the state root matches expected value (updated based on actual output)
-            expected_state_root = "12c3b9e21f6636e8f81bf4a501c00e5bdd789b561ae7e1455807dca558117992"
+            expected_state_root = "37dbbe22dd392b90d5130d59c1ca1e1507752364948d7e14e95db356ec823e65"
             actual_state_root = result.root.hex()
             self.assertEqual(actual_state_root, expected_state_root)
             
@@ -67,7 +67,7 @@ class TestIntegration(unittest.TestCase):
                     result = generate_validator_proof("test/data/state.json", validator_index, prev_state_root, prev_block_root)
                     
                     # All should produce the same state root (since it's the same state)
-                    expected_state_root = "12c3b9e21f6636e8f81bf4a501c00e5bdd789b561ae7e1455807dca558117992"
+                    expected_state_root = "37dbbe22dd392b90d5130d59c1ca1e1507752364948d7e14e95db356ec823e65"
                     self.assertEqual(result.root.hex(), expected_state_root)
                     
                     # All proofs should have the same length (structure is consistent)

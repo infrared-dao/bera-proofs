@@ -46,9 +46,9 @@ def extract_historical_roots_from_file(historical_state_file: str) -> Tuple[str,
     """
     try:
         state = load_and_process_state(historical_state_file)
-        # Extract roots from position 2 (slot % 8)
-        state_root = f"0x{state.state_roots[2].hex()}"
-        block_root = f"0x{state.block_roots[2].hex()}"
+        # Extract roots from position (slot % 8) as per ETH2 spec
+        state_root = f"0x{state.state_roots[state.slot % 8].hex()}"
+        block_root = f"0x{state.block_roots[state.slot % 8].hex()}"
         return state_root, block_root
     except Exception as e:
         raise click.ClickException(f"Failed to extract historical roots from {historical_state_file}: {e}")
