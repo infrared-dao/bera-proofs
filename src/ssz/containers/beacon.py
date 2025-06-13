@@ -358,7 +358,7 @@ class BeaconState:
         roots.append(encode_slashings(self.slashings))
         roots.append(merkle_root_basic(self.total_slashing, "uint64"))
         
-        if is_electra and self.pending_partial_withdrawals:
+        if is_electra:
             roots.append(
                 encode_pending_partial_withdrawals_leaf_list(
                     [p.merkle_root() for p in self.pending_partial_withdrawals]

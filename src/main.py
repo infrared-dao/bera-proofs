@@ -277,7 +277,7 @@ def _generate_state_proof(
     """
     # Get serialized state fields using the container's serialize method
     # Note: We assume this is not Electra for now
-    state_fields = state.serialize(prev_block_root, prev_state_root, is_electra=False)
+    state_fields = state.serialize(prev_block_root, prev_state_root, is_electra=True)
     
     # The serialize method already returns the properly padded fields
     # Build state tree and get proof
@@ -293,7 +293,7 @@ def _compute_state_root(state: BeaconState, validators_root: Optional[bytes] = N
     prev_block_root = state.block_roots[state.slot % 8]
     
     # Use the new serialize method to get all field roots
-    state_fields = state.serialize(prev_block_root, prev_state_root, is_electra=False)
+    state_fields = state.serialize(prev_block_root, prev_state_root, is_electra=True)
     
     # If validators_root is provided, replace field 9 with it
     if validators_root is not None:
