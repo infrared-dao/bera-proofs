@@ -109,6 +109,7 @@ def json_to_class(data: Any, cls: type) -> Any:
             )
             processed["slashings"] = processed.get("slashings", [])
             processed["total_slashing"] = processed.get("total_slashing", 0)
+            processed["pending_partial_withdrawals"] = processed.get("pending_partial_withdrawals", [])
             # Process nested structures
             processed["fork"] = json_to_class(processed["fork"], Fork)
             processed["latest_block_header"] = json_to_class(
