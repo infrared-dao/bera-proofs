@@ -19,7 +19,7 @@ from hashlib import sha256
 # This determines the size of block_roots and state_roots vectors in BeaconState
 SLOTS_PER_HISTORICAL_ROOT = 8192
 
-# Number of epochs to maintain in historical vectors 
+# Number of epochs to maintain in historical vectors
 # Used for randao_mixes vector in BeaconState
 EPOCHS_PER_HISTORICAL_VECTOR = 65536
 
@@ -40,7 +40,9 @@ BERACHAIN_VECTOR = 8
 
 # Maximum number of validators that can be registered
 # Used for validators and balances lists in BeaconState
-MAX_VALIDATORS = 69  # Note: This appears to be a test value, production would be much higher
+MAX_VALIDATORS = (
+    69  # Note: This appears to be a test value, production would be much higher
+)
 
 # Maximum capacity for the validator registry
 # Production limit from the Ethereum specification
@@ -86,4 +88,4 @@ ETH_ADDRESS_SIZE = 20
 BLS_PUBKEY_SIZE = 48
 
 # Standard root size (same as hash size)
-ROOT_SIZE = 32 
+ROOT_SIZE = 32

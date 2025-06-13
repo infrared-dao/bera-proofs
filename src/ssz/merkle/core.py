@@ -21,7 +21,12 @@ from typing import Any, List, TYPE_CHECKING
 
 # Import our own modules
 from ..constants import ZERO_HASHES, MAX_VALIDATORS, VALIDATOR_REGISTRY_LIMIT
-from ..serialization import serialize_uint64, serialize_uint256, serialize_bool, serialize_bytes
+from ..serialization import (
+    serialize_uint64,
+    serialize_uint256,
+    serialize_bool,
+    serialize_bytes,
+)
 
 # Avoid circular imports for type checking
 if TYPE_CHECKING:
@@ -31,17 +36,17 @@ if TYPE_CHECKING:
 def merkle_root_basic(value: Any, type_str: str) -> bytes:
     """
     Calculate the merkle root for basic SSZ types.
-    
+
     Basic types are atomic values that are either padded to 32 bytes
     or hashed if they exceed 32 bytes.
-    
+
     Args:
         value: The value to merkleize
         type_str: SSZ type string (e.g., 'uint64', 'bytes32', 'Boolean')
-        
+
     Returns:
         32-byte merkle root (padded value or hash)
-        
+
     Examples:
         >>> merkle_root_basic(123, 'uint64')  # Returns padded uint64
         >>> merkle_root_basic(b'\\x01' * 32, 'bytes32')  # Returns as-is
@@ -53,7 +58,7 @@ def merkle_root_basic(value: Any, type_str: str) -> bytes:
             value = bytes.fromhex(value[2:])
         else:
             value = bytes.fromhex(value)
-    
+
     if type_str == "bytes32":
         return serialize_bytes(value, 32)  # Already 32 bytes, return directly
     elif type_str == "uint64":
@@ -112,30 +117,30 @@ def merkle_root_basic(value: Any, type_str: str) -> bytes:
 def merkle_root_byte_list(value: bytes, max_length: int) -> bytes:
     """
     Calculate merkle root for a variable-length byte list.
-    
+
     ByteList types are chunked into 32-byte pieces, merkleized,
     and then mixed with their length.
-    
+
     Args:
         value: The byte array to merkleize
         max_length: Maximum allowed length for validation
-        
+
     Returns:
         32-byte merkle root
     """
     if len(value) > max_length:
         raise ValueError(f"Byte list length {len(value)} exceeds maximum {max_length}")
-    
+
     # Split into 32-byte chunks
     chunks = [value[i : i + 32] for i in range(0, len(value), 32)]
-    
+
     # Pad last chunk if needed
     if chunks and len(chunks[-1]) < 32:
         chunks[-1] += b"\0" * (32 - len(chunks[-1]))
-    
+
     # Get merkle root of chunks
     chunks_root = merkle_root_list(chunks)
-    
+
     # Mix in length
     length_packed = len(value).to_bytes(32, "little")
     return sha256(chunks_root + length_packed).digest()
@@ -144,36 +149,36 @@ def merkle_root_byte_list(value: bytes, max_length: int) -> bytes:
 def merkle_root_container(obj: Any, fields: List[tuple]) -> bytes:
     """
     Calculate merkle root for an SSZ container.
-    
+
     Containers are merkleized by calculating the merkle root of each field
     and then merkleizing the list of field roots.
-    
+
     Args:
         obj: The container object
         fields: List of (field_name, field_type) tuples describing the container
-        
+
     Returns:
         32-byte merkle root of the container
-        
+
     Examples:
         >>> fields = [('slot', 'uint64'), ('root', 'bytes32')]
         >>> merkle_root_container(beacon_block_header, fields)
     """
     field_roots = []
-    
+
     for field_name, field_type in fields:
         field_value = getattr(obj, field_name)
-        
+
         # Handle container types (they have their own merkle_root method)
         if field_type in {
             "Fork",
-            "BeaconBlockHeader", 
+            "BeaconBlockHeader",
             "Eth1Data",
             "ExecutionPayloadHeader",
             "Validator",
         }:
             root = field_value.merkle_root()
-        # Handle SSZ List types  
+        # Handle SSZ List types
         elif field_type.startswith("List["):
             elem_type = field_type.split("[")[1].split(",")[0]
             limit = int(field_type.split(",")[1].strip("]"))
@@ -186,20 +191,20 @@ def merkle_root_container(obj: Any, fields: List[tuple]) -> bytes:
         # Handle basic types
         else:
             root = merkle_root_basic(field_value, field_type)
-            
+
         field_roots.append(root)
-    
+
     return merkle_root_list(field_roots)
 
 
 def merkle_root_element(value: Any, elem_type: str) -> bytes:
     """
     Calculate merkle root for a single element (used in lists/vectors).
-    
+
     Args:
         value: The element value
         elem_type: SSZ type of the element
-        
+
     Returns:
         32-byte merkle root of the element
     """
@@ -207,7 +212,7 @@ def merkle_root_element(value: Any, elem_type: str) -> bytes:
     if elem_type in {
         "Fork",
         "BeaconBlockHeader",
-        "Eth1Data", 
+        "Eth1Data",
         "ExecutionPayloadHeader",
         "Validator",
     }:
@@ -219,76 +224,76 @@ def merkle_root_element(value: Any, elem_type: str) -> bytes:
 def merkle_root_list(roots: List[bytes]) -> bytes:
     """
     Calculate merkle root of a list of 32-byte roots.
-    
+
     This is the fundamental building block for merkleization.
     The list is padded to the next power of two and then
     a binary merkle tree is constructed.
-    
+
     Args:
         roots: List of 32-byte hash values
-        
+
     Returns:
         32-byte merkle root
-        
+
     Examples:
-        >>> merkle_root_list([b'\\x01' * 32, b'\\x02' * 32])  
+        >>> merkle_root_list([b'\\x01' * 32, b'\\x02' * 32])
         >>> merkle_root_list([])  # Returns zero hash
     """
     if not roots:
         return b"\0" * 32
-    
+
     # Pad to next power of two
     n = len(roots)
     k = math.ceil(math.log2(max(n, 1)))
     num_leaves = 1 << k
     padded = roots + [b"\0" * 32] * (num_leaves - n)
-    
+
     return build_merkle_tree(padded)[-1][0]
 
 
 def merkle_root_vector(values: List[Any], elem_type: str, limit: int) -> bytes:
     """
     Calculate merkle root for an SSZ Vector.
-    
+
     Vectors have a fixed capacity and are padded with zero elements
     to reach that capacity before merkleization.
-    
+
     Args:
         values: List of values in the vector
         elem_type: SSZ type of vector elements
         limit: Fixed capacity of the vector
-        
+
     Returns:
         32-byte merkle root
-        
+
     Examples:
         >>> merkle_root_vector([b'\\x01'*32, b'\\x02'*32], 'bytes32', 8)
     """
     # Calculate roots for actual elements
     elements_roots = [merkle_root_element(v, elem_type) for v in values]
-    
+
     # Pad to the fixed limit with zero hashes
     elements_roots += [b"\0" * 32] * (limit - len(elements_roots))
-    
+
     return merkle_root_list(elements_roots)
 
 
 def merkle_root_ssz_list(values: List[Any], elem_type: str, limit: int) -> bytes:
     """
     Calculate merkle root for an SSZ List.
-    
+
     Lists are variable-length but have a maximum capacity.
     The merkle root is calculated from the element roots
     and then mixed with the actual length.
-    
+
     Args:
         values: List of values
-        elem_type: SSZ type of list elements  
+        elem_type: SSZ type of list elements
         limit: Maximum capacity of the list
-        
+
     Returns:
         32-byte merkle root
-        
+
     Examples:
         >>> merkle_root_ssz_list([validator1, validator2], 'Validator', 1000)
     """
@@ -297,7 +302,7 @@ def merkle_root_ssz_list(values: List[Any], elem_type: str, limit: int) -> bytes
     else:
         elements_roots = [merkle_root_element(v, elem_type) for v in values]
         chunks_root = merkle_root_list(elements_roots)
-    
+
     # Mix in the actual length
     length_packed = len(values).to_bytes(32, "little")
     return sha256(chunks_root + length_packed).digest()
@@ -306,26 +311,26 @@ def merkle_root_ssz_list(values: List[Any], elem_type: str, limit: int) -> bytes
 def build_merkle_tree(leaves: List[bytes]) -> List[List[bytes]]:
     """
     Build a complete binary merkle tree from leaf nodes.
-    
+
     Returns the full tree structure, with leaves at index 0
     and root at the last index.
-    
+
     Args:
         leaves: List of 32-byte leaf hashes (should be power-of-two length)
-        
+
     Returns:
         List of tree levels, from leaves to root
-        
+
     Examples:
         >>> tree = build_merkle_tree([b'\\x01'*32, b'\\x02'*32])
         >>> root = tree[-1][0]  # Root is at top level
     """
     if not leaves:
         return [[b"\0" * 32]]
-    
+
     tree = [leaves]
     current = leaves
-    
+
     while len(current) > 1:
         next_level = []
         for i in range(0, len(current), 2):
@@ -335,29 +340,29 @@ def build_merkle_tree(leaves: List[bytes]) -> List[List[bytes]]:
             next_level.append(parent)
         tree.append(next_level)
         current = next_level
-    
+
     return tree
 
 
 def merkle_list_tree(roots: List[bytes]) -> bytes:
     """
     Build merkle tree and return the full tree structure.
-    
+
     Similar to merkle_root_list but returns the tree instead of just root.
-    
+
     Args:
         roots: List of 32-byte root hashes
-        
+
     Returns:
         Complete merkle tree structure
     """
     if not roots:
         return b"\0" * 32
-    
+
     # Pad to next power of two
     n = len(roots)
     k = math.ceil(math.log2(max(n, 1)))
     num_leaves = 1 << k
     padded = roots + [b"\0" * 32] * (num_leaves - n)
-    
-    return build_merkle_tree(padded) 
+
+    return build_merkle_tree(padded)

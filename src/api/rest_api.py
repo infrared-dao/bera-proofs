@@ -16,14 +16,14 @@ import uvicorn
 from .proof_service import ProofService, ProofServiceError, ProofResult
 from .beacon_client import BeaconAPIClient, BeaconAPIError
 from ..models.api_models import (
-    ProofRequest, 
-    ProofResponse, 
-    ErrorResponse, 
+    ProofRequest,
+    ProofResponse,
+    ErrorResponse,
     HealthResponse,
     ValidatorProofRequest,
     ValidatorProofResponse,
-    BalanceProofRequest, 
-    BalanceProofResponse
+    BalanceProofRequest,
+    BalanceProofResponse,
 )
 
 # Configure logging
@@ -57,12 +57,9 @@ app = FastAPI(
     version="1.0.0",
     contact={
         "name": "Bera Proofs Team",
-        "url": "https://github.com/berachain/bera-proofs"
+        "url": "https://github.com/berachain/bera-proofs",
     },
-    license_info={
-        "name": "MIT",
-        "url": "https://opensource.org/licenses/MIT"
-    }
+    license_info={"name": "MIT", "url": "https://opensource.org/licenses/MIT"},
 )
 
 # Add CORS middleware
@@ -95,8 +92,8 @@ async def proof_service_exception_handler(request, exc: ProofServiceError):
         content=ErrorResponse(
             error=str(exc),
             code="PROOF_GENERATION_ERROR",
-            details={"error_type": "ProofServiceError"}
-        ).model_dump()
+            details={"error_type": "ProofServiceError"},
+        ).model_dump(),
     )
 
 
@@ -108,9 +105,9 @@ async def beacon_api_exception_handler(request, exc: BeaconAPIError):
         status_code=502,
         content=ErrorResponse(
             error=str(exc),
-            code="BEACON_API_ERROR", 
-            details={"error_type": "BeaconAPIError"}
-        ).model_dump()
+            code="BEACON_API_ERROR",
+            details={"error_type": "BeaconAPIError"},
+        ).model_dump(),
     )
 
 
@@ -123,8 +120,8 @@ async def general_exception_handler(request, exc: Exception):
         content=ErrorResponse(
             error="Internal server error",
             code="INTERNAL_ERROR",
-            details={"error_type": type(exc).__name__}
-        ).model_dump()
+            details={"error_type": type(exc).__name__},
+        ).model_dump(),
     )
 
 
@@ -136,7 +133,7 @@ async def root():
         "version": "1.0.0",
         "description": "Generate Merkle proofs for Berachain beacon state",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
     }
 
 
@@ -144,45 +141,38 @@ async def root():
 async def health_check(service: ProofService = Depends(get_proof_service)):
     """
     Health check endpoint.
-    
+
     Checks the status of the API and beacon chain connectivity.
     """
     try:
         # Check beacon API connectivity
         beacon_status = service.beacon_client.health_check()
-        
+
         return HealthResponse(
-            status="healthy",
-            beacon_api=beacon_status,
-            version="1.0.0"
+            status="healthy", beacon_api=beacon_status, version="1.0.0"
         )
     except Exception as e:
         logger.warning(f"Health check failed: {e}")
-        return HealthResponse(
-            status="degraded",
-            beacon_api=False,
-            version="1.0.0"
-        )
+        return HealthResponse(status="degraded", beacon_api=False, version="1.0.0")
 
 
 @app.post("/proofs/validator", response_model=ValidatorProofResponse)
 async def generate_validator_proof(
-    request: ValidatorProofRequest,
-    service: ProofService = Depends(get_proof_service)
+    request: ValidatorProofRequest, service: ProofService = Depends(get_proof_service)
 ):
     """
     Generate a validator existence proof.
-    
+
     Generates a Merkle proof that proves a specific validator exists in the
     beacon state at the given slot. The proof can be verified against the
     state root to confirm the validator's presence.
-    
+
     All data is automatically fetched from the beacon chain API.
-    
+
     **Proof Structure:**
     - Validator proof within the validators list
     - State proof for the validators field
-    
+
     **Use Cases:**
     - Verify validator registration
     - Prove validator participation in consensus
@@ -193,16 +183,16 @@ async def generate_validator_proof(
             val_index=request.val_index,
             prev_state_root=request.prev_state_root,
             prev_block_root=request.prev_block_root,
-            slot=request.slot
+            slot=request.slot,
         )
-        
+
         return ValidatorProofResponse(
             proof=result["proof"],
             root=result["root"],
             validator_index=request.val_index,
             slot=request.slot,
             proof_type="validator",
-            metadata=result["metadata"]
+            metadata=result["metadata"],
         )
     except ProofServiceError:
         raise
@@ -213,22 +203,21 @@ async def generate_validator_proof(
 
 @app.post("/proofs/balance", response_model=BalanceProofResponse)
 async def generate_balance_proof(
-    request: BalanceProofRequest,
-    service: ProofService = Depends(get_proof_service)
+    request: BalanceProofRequest, service: ProofService = Depends(get_proof_service)
 ):
     """
     Generate a validator balance proof.
-    
+
     Generates a Merkle proof that proves a validator's balance exists in the
     beacon state at the given slot. The proof includes both the precise balance
     and effective balance.
-    
+
     All data is automatically fetched from the beacon chain API.
-    
+
     **Proof Structure:**
     - Balance proof within the balances list
     - State proof for the balances field
-    
+
     **Use Cases:**
     - Verify validator balance for external protocols
     - Prove staking rewards and penalties
@@ -239,16 +228,16 @@ async def generate_balance_proof(
             val_index=request.val_index,
             prev_state_root=request.prev_state_root,
             prev_block_root=request.prev_block_root,
-            slot=request.slot
+            slot=request.slot,
         )
-        
+
         return BalanceProofResponse(
             proof=result["proof"],
             root=result["root"],
             validator_index=request.val_index,
             slot=request.slot,
             proof_type="balance",
-            metadata=result["metadata"]
+            metadata=result["metadata"],
         )
     except ProofServiceError:
         raise
@@ -263,11 +252,11 @@ async def generate_validator_proof_get(
     slot: str = "head",
     prev_state_root: Optional[str] = None,
     prev_block_root: Optional[str] = None,
-    service: ProofService = Depends(get_proof_service)
+    service: ProofService = Depends(get_proof_service),
 ):
     """
     Generate validator proof via GET request (convenience endpoint).
-    
+
     Same functionality as POST endpoint but accessible via GET for simple integrations.
     """
     try:
@@ -275,7 +264,7 @@ async def generate_validator_proof_get(
             val_index=val_index,
             prev_state_root=prev_state_root,
             prev_block_root=prev_block_root,
-            slot=slot
+            slot=slot,
         )
         return result
     except ProofServiceError:
@@ -291,11 +280,11 @@ async def generate_balance_proof_get(
     slot: str = "head",
     prev_state_root: Optional[str] = None,
     prev_block_root: Optional[str] = None,
-    service: ProofService = Depends(get_proof_service)
+    service: ProofService = Depends(get_proof_service),
 ):
     """
     Generate balance proof via GET request (convenience endpoint).
-    
+
     Same functionality as POST endpoint but accessible via GET for simple integrations.
     """
     try:
@@ -303,7 +292,7 @@ async def generate_balance_proof_get(
             val_index=val_index,
             prev_state_root=prev_state_root,
             prev_block_root=prev_block_root,
-            slot=slot
+            slot=slot,
         )
         return result
     except ProofServiceError:
@@ -316,10 +305,10 @@ async def generate_balance_proof_get(
 def run_server(host: str = "127.0.0.1", port: int = 8000, dev: bool = False):
     """
     Run the API server.
-    
+
     Args:
         host: Host to bind to
-        port: Port to bind to  
+        port: Port to bind to
         dev: Enable development mode with auto-reload
     """
     logger.info(f"Starting Bera Proofs API server on {host}:{port}")
@@ -328,9 +317,9 @@ def run_server(host: str = "127.0.0.1", port: int = 8000, dev: bool = False):
         host=host,
         port=port,
         reload=dev,
-        log_level="info"
+        log_level="info",
     )
 
 
 if __name__ == "__main__":
-    run_server(dev=True) 
+    run_server(dev=True)

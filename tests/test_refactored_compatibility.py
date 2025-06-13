@@ -11,30 +11,37 @@ import sys
 import os
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # Import from the refactored SSZ library
 from ssz import (
     # Basic serialization functions
-    serialize_uint64, serialize_uint256, serialize_bool, serialize_bytes,
-    
-    # Utility functions  
-    camel_to_snake, normalize_hex,
-    
+    serialize_uint64,
+    serialize_uint256,
+    serialize_bool,
+    serialize_bytes,
+    # Utility functions
+    camel_to_snake,
+    normalize_hex,
     # Merkle functions
-    merkle_root_basic, merkle_root_list, merkle_root_ssz_list, merkle_root_vector,
-    
+    merkle_root_basic,
+    merkle_root_list,
+    merkle_root_ssz_list,
+    merkle_root_vector,
     # Container classes
-    Fork, BeaconState, Validator, BeaconBlockHeader, Eth1Data, ExecutionPayloadHeader,
-    
+    Fork,
+    BeaconState,
+    Validator,
+    BeaconBlockHeader,
+    Eth1Data,
+    ExecutionPayloadHeader,
     # JSON processing
     json_to_class,
-    
     # Constants
-    MAX_VALIDATORS, SLOTS_PER_HISTORICAL_ROOT,
-    
+    MAX_VALIDATORS,
+    SLOTS_PER_HISTORICAL_ROOT,
     # Crypto
-    sha256
+    sha256,
 )
 
 # Import the refactored main function
@@ -262,28 +269,36 @@ class TestRefactoredSSZCompatibility(unittest.TestCase):
         # We'll use the test data if available
         try:
             # Historical values from 8 slots ago (as required by specification)
-            prev_state_root = "01ef6767e8908883d1e84e91095bbb3f7d98e33773d13b6cc949355909365ff8"
-            prev_block_root = "28925c02852c6462577e73cc0fdb0f49bbf910b559c8c0d1b8f69cac38fa3f74"
-            
-            result = generate_validator_proof("test/data/state.json", 39, prev_state_root, prev_block_root)
-            
+            prev_state_root = (
+                "01ef6767e8908883d1e84e91095bbb3f7d98e33773d13b6cc949355909365ff8"
+            )
+            prev_block_root = (
+                "28925c02852c6462577e73cc0fdb0f49bbf910b559c8c0d1b8f69cac38fa3f74"
+            )
+
+            result = generate_validator_proof(
+                "test/data/state.json", 39, prev_state_root, prev_block_root
+            )
+
             # Verify the proof is the expected length and type
             self.assertIsInstance(result.proof, list)
             self.assertIsInstance(result.root, bytes)
             self.assertEqual(len(result.root), 32)
-            
+
             # Verify expected state root (updated based on actual output with correct historical values)
-            expected_state_root = bytes.fromhex("37dbbe22dd392b90d5130d59c1ca1e1507752364948d7e14e95db356ec823e65")
+            expected_state_root = bytes.fromhex(
+                "37dbbe22dd392b90d5130d59c1ca1e1507752364948d7e14e95db356ec823e65"
+            )
             self.assertEqual(result.root, expected_state_root)
-            
+
             # Verify proof has expected length (45 elements as we observed)
             self.assertEqual(len(result.proof), 45)
-            
+
             # Verify all proof elements are 32-byte hashes
             for i, step in enumerate(result.proof):
                 self.assertIsInstance(step, bytes, f"Proof step {i} should be bytes")
                 self.assertEqual(len(step), 32, f"Proof step {i} should be 32 bytes")
-                
+
         except FileNotFoundError:
             # Skip test if test data file doesn't exist
             self.skipTest("Test data file test/data/state.json not found")
@@ -298,8 +313,13 @@ class TestRefactoredModules(unittest.TestCase):
     def test_encoding_module_imports(self):
         """Test that encoding module functions are properly accessible"""
         # Now importing from merkle.encoding since we removed the old encoding.py
-        from ssz.merkle.encoding import encode_balances, encode_randao_mixes, encode_block_roots, encode_slashings
-        
+        from ssz.merkle.encoding import (
+            encode_balances,
+            encode_randao_mixes,
+            encode_block_roots,
+            encode_slashings,
+        )
+
         # These should be callable functions
         self.assertTrue(callable(encode_balances))
         self.assertTrue(callable(encode_randao_mixes))
@@ -311,7 +331,7 @@ class TestRefactoredModules(unittest.TestCase):
         from ssz.merkle import build_merkle_tree, merkle_root_list, get_proof
         from ssz.merkle.core import merkle_root_basic, merkle_root_ssz_list
         from ssz.merkle.proof import get_fixed_capacity_proof, compute_root_from_proof
-        
+
         # These should be callable functions
         self.assertTrue(callable(build_merkle_tree))
         self.assertTrue(callable(merkle_root_list))
@@ -325,7 +345,7 @@ class TestRefactoredModules(unittest.TestCase):
         """Test that container classes are properly accessible"""
         from ssz.containers import Fork, BeaconState, Validator, BeaconBlockHeader
         from ssz.containers.beacon import Eth1Data, ExecutionPayloadHeader
-        
+
         # These should be classes
         self.assertTrue(isinstance(Fork, type))
         self.assertTrue(isinstance(BeaconState, type))
@@ -336,17 +356,21 @@ class TestRefactoredModules(unittest.TestCase):
 
     def test_constants_module(self):
         """Test that constants are properly defined"""
-        from ssz.constants import MAX_VALIDATORS, SLOTS_PER_HISTORICAL_ROOT, VALIDATOR_REGISTRY_LIMIT
-        
+        from ssz.constants import (
+            MAX_VALIDATORS,
+            SLOTS_PER_HISTORICAL_ROOT,
+            VALIDATOR_REGISTRY_LIMIT,
+        )
+
         # Constants should be integers
         self.assertIsInstance(MAX_VALIDATORS, int)
         self.assertIsInstance(SLOTS_PER_HISTORICAL_ROOT, int)
         self.assertIsInstance(VALIDATOR_REGISTRY_LIMIT, int)
-        
+
         # Verify some expected values
         self.assertGreater(VALIDATOR_REGISTRY_LIMIT, 0)
         self.assertGreater(SLOTS_PER_HISTORICAL_ROOT, 0)
 
 
-if __name__ == '__main__':
-    unittest.main() 
+if __name__ == "__main__":
+    unittest.main()

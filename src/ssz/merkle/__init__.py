@@ -72,4 +72,4 @@ __all__ = [
     "validate_proof_length",
     "get_proof_indices",
     "batch_verify_proofs",
-] 
+]

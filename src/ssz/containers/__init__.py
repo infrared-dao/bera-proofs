@@ -17,31 +17,29 @@ The containers follow the SSZ specification and provide methods for:
 from .base import SSZContainer
 from .beacon import (
     Fork,
-    BeaconBlockHeader, 
+    BeaconBlockHeader,
     Eth1Data,
     ExecutionPayloadHeader,
     Validator,
     ValidatorBalance,
     BeaconState,
-    PendingPartialWithdrawal
+    PendingPartialWithdrawal,
 )
 from .utils import json_to_class, load_and_process_state
 
 __all__ = [
     # Base classes
-    'SSZContainer',
-    
+    "SSZContainer",
     # Beacon chain containers
-    'Fork',
-    'BeaconBlockHeader',
-    'Eth1Data', 
-    'ExecutionPayloadHeader',
-    'Validator',
-    'ValidatorBalance',
-    'BeaconState',
-    'PendingPartialWithdrawal',
-    
+    "Fork",
+    "BeaconBlockHeader",
+    "Eth1Data",
+    "ExecutionPayloadHeader",
+    "Validator",
+    "ValidatorBalance",
+    "BeaconState",
+    "PendingPartialWithdrawal",
     # Utilities
-    'json_to_class',
-    'load_and_process_state'
-] 
+    "json_to_class",
+    "load_and_process_state",
+]

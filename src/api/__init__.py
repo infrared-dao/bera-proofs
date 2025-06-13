@@ -18,7 +18,4 @@ Usage:
 from .beacon_client import BeaconAPIClient
 from .proof_service import ProofService
 
-__all__ = [
-    'BeaconAPIClient',
-    'ProofService'
-] 
+__all__ = ["BeaconAPIClient", "ProofService"]

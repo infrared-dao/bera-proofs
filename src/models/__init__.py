@@ -14,16 +14,6 @@ Usage:
     request = ProofRequest(val_index=42, slot="head")
 """
 
-from .api_models import (
-    ProofRequest,
-    ProofResponse, 
-    ErrorResponse,
-    HealthResponse
-)
+from .api_models import ProofRequest, ProofResponse, ErrorResponse, HealthResponse
 
-__all__ = [
-    'ProofRequest',
-    'ProofResponse',
-    'ErrorResponse', 
-    'HealthResponse'
-] 
+__all__ = ["ProofRequest", "ProofResponse", "ErrorResponse", "HealthResponse"]

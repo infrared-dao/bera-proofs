@@ -31,8 +31,15 @@ def normalize_hex(hex_str, expected_bytes=None):
 
 
 def json_to_class(data: Any, cls: type) -> Any:
-    from .beacon import Fork, BeaconBlockHeader, Eth1Data, ExecutionPayloadHeader, Validator, BeaconState
-    
+    from .beacon import (
+        Fork,
+        BeaconBlockHeader,
+        Eth1Data,
+        ExecutionPayloadHeader,
+        Validator,
+        BeaconState,
+    )
+
     if isinstance(data, dict):
         # Convert keys to snake_case and adjust data types
         processed = {}
@@ -109,6 +116,9 @@ def json_to_class(data: Any, cls: type) -> Any:
             )
             processed["slashings"] = processed.get("slashings", [])
             processed["total_slashing"] = processed.get("total_slashing", 0)
+            processed["pending_partial_withdrawals"] = processed.get(
+                "pending_partial_withdrawals", []
+            )
             # Process nested structures
             processed["fork"] = json_to_class(processed["fork"], Fork)
             processed["latest_block_header"] = json_to_class(
@@ -137,9 +147,9 @@ def json_to_class(data: Any, cls: type) -> Any:
     return data
 
 
-def load_and_process_state(state_file: str) -> 'BeaconState':
+def load_and_process_state(state_file: str) -> "BeaconState":
     from .beacon import BeaconState
-    
+
     with open(state_file, "r") as f:
         state_data = json.load(f)["data"]
-    return json_to_class(state_data, BeaconState) 
+    return json_to_class(state_data, BeaconState)

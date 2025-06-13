@@ -20,6 +20,7 @@ from ..constants import (
 @dataclass
 class Fork:
     """Fork represents a network fork with version information."""
+
     previous_version: bytes
     current_version: bytes
     epoch: int
@@ -27,7 +28,7 @@ class Fork:
     def serialize(self) -> List[bytes]:
         """Serialize Fork fields to list of 32-byte chunks."""
         from ..merkle.core import merkle_root_basic
-        
+
         roots = []
         roots.append(merkle_root_basic(self.previous_version, "bytes4"))
         roots.append(merkle_root_basic(self.current_version, "bytes4"))
@@ -39,6 +40,7 @@ class Fork:
     def merkle_tree(self) -> List[List[bytes]]:
         """Build complete merkle tree for Fork."""
         from ..merkle.core import build_merkle_tree
+
         return build_merkle_tree(self.serialize())
 
     def merkle_root(self) -> bytes:
@@ -48,12 +50,14 @@ class Fork:
     def get_proof(self, index: int) -> List[bytes]:
         """Get merkle proof for field at index."""
         from ..merkle.proof import get_proof
+
         return get_proof(self.merkle_tree(), index)
 
 
 @dataclass
 class BeaconBlockHeader:
     """BeaconBlockHeader represents the header of a beacon chain block."""
+
     slot: int
     proposer_index: int
     parent_root: bytes
@@ -63,7 +67,7 @@ class BeaconBlockHeader:
     def serialize(self) -> List[bytes]:
         """Serialize BeaconBlockHeader fields to list of 32-byte chunks."""
         from ..merkle.core import merkle_root_basic
-        
+
         roots = []
         roots.append(merkle_root_basic(self.slot, "uint64"))
         roots.append(merkle_root_basic(self.proposer_index, "uint64"))
@@ -77,6 +81,7 @@ class BeaconBlockHeader:
     def merkle_tree(self) -> List[List[bytes]]:
         """Build complete merkle tree for BeaconBlockHeader."""
         from ..merkle.core import build_merkle_tree
+
         return build_merkle_tree(self.serialize())
 
     def merkle_root(self) -> bytes:
@@ -86,12 +91,14 @@ class BeaconBlockHeader:
     def get_proof(self, index: int) -> List[bytes]:
         """Get merkle proof for field at index."""
         from ..merkle.proof import get_proof
+
         return get_proof(self.merkle_tree(), index)
 
 
 @dataclass
 class Eth1Data:
     """Eth1Data represents Ethereum 1.0 chain data in the beacon chain."""
+
     deposit_root: bytes
     deposit_count: int
     block_hash: bytes
@@ -99,7 +106,7 @@ class Eth1Data:
     def serialize(self) -> List[bytes]:
         """Serialize Eth1Data fields to list of 32-byte chunks."""
         from ..merkle.core import merkle_root_basic
-        
+
         roots = []
         roots.append(self.deposit_root)
         roots.append(merkle_root_basic(self.deposit_count, "uint64"))
@@ -111,6 +118,7 @@ class Eth1Data:
     def merkle_tree(self) -> List[List[bytes]]:
         """Build complete merkle tree for Eth1Data."""
         from ..merkle.core import build_merkle_tree
+
         return build_merkle_tree(self.serialize())
 
     def merkle_root(self) -> bytes:
@@ -120,12 +128,14 @@ class Eth1Data:
     def get_proof(self, index: int) -> List[bytes]:
         """Get merkle proof for field at index."""
         from ..merkle.proof import get_proof
+
         return get_proof(self.merkle_tree(), index)
 
 
 @dataclass
 class ExecutionPayloadHeader:
     """ExecutionPayloadHeader represents the header of an execution payload."""
+
     parent_hash: bytes
     fee_recipient: bytes
     state_root: bytes
@@ -147,7 +157,7 @@ class ExecutionPayloadHeader:
     def serialize(self) -> List[bytes]:
         """Serialize ExecutionPayloadHeader fields to list of 32-byte chunks."""
         from ..merkle.core import merkle_root_basic
-        
+
         roots = []
         roots.append(self.parent_hash)
         roots.append(merkle_root_basic(self.fee_recipient, "bytes20"))
@@ -173,6 +183,7 @@ class ExecutionPayloadHeader:
     def merkle_tree(self) -> List[List[bytes]]:
         """Build complete merkle tree for ExecutionPayloadHeader."""
         from ..merkle.core import build_merkle_tree
+
         return build_merkle_tree(self.serialize())
 
     def merkle_root(self) -> bytes:
@@ -182,12 +193,14 @@ class ExecutionPayloadHeader:
     def get_proof(self, index: int) -> List[bytes]:
         """Get merkle proof for field at index."""
         from ..merkle.proof import get_proof
+
         return get_proof(self.merkle_tree(), index)
 
 
 @dataclass
 class Validator:
     """Validator represents a beacon chain validator."""
+
     pubkey: bytes
     withdrawal_credentials: bytes
     effective_balance: int
@@ -200,7 +213,7 @@ class Validator:
     def serialize(self) -> List[bytes]:
         """Serialize Validator fields to list of 32-byte chunks."""
         from ..merkle.core import merkle_root_basic
-        
+
         roots = []
         roots.append(merkle_root_basic(self.pubkey, "bytes48"))
         roots.append(self.withdrawal_credentials)
@@ -215,6 +228,7 @@ class Validator:
     def merkle_tree(self) -> List[List[bytes]]:
         """Build complete merkle tree for Validator."""
         from ..merkle.core import build_merkle_tree
+
         return build_merkle_tree(self.serialize())
 
     def merkle_root(self) -> bytes:
@@ -224,44 +238,49 @@ class Validator:
     def get_proof(self, index: int) -> List[bytes]:
         """Get merkle proof for field at index."""
         from ..merkle.proof import get_proof
+
         return get_proof(self.merkle_tree(), index)
 
 
 @dataclass
 class ValidatorBalance:
     """ValidatorBalance combines a validator with their balance."""
+
     validator: Validator
     balance: int  # uint64
-    
+
     def serialize(self) -> List[bytes]:
         """Serialize ValidatorBalance fields to list of 32-byte chunks."""
         from ..merkle.core import merkle_root_basic
-        
+
         roots = []
         roots.append(self.validator.merkle_root())
         roots.append(merkle_root_basic(self.balance, "uint64"))
         # pad to 4 leaves with zero-hash
         roots += [b"\x00" * 32] * 2
         return roots
-    
+
     def merkle_tree(self) -> List[List[bytes]]:
         """Build complete merkle tree for ValidatorBalance."""
         from ..merkle.core import build_merkle_tree
+
         return build_merkle_tree(self.serialize())
-    
+
     def merkle_root(self) -> bytes:
         """Calculate SSZ merkle root for ValidatorBalance."""
         return self.merkle_tree()[-1][0]
-    
+
     def get_proof(self, index: int) -> List[bytes]:
         """Get merkle proof for field at index."""
         from ..merkle.proof import get_proof
+
         return get_proof(self.merkle_tree(), index)
 
 
 @dataclass
 class PendingPartialWithdrawal:
     """PendingPartialWithdrawal represents a pending withdrawal from a validator."""
+
     validator_index: int  # uint64
     amount: int  # uint64
     withdrawable_epoch: int  # uint64
@@ -269,7 +288,7 @@ class PendingPartialWithdrawal:
     def serialize(self) -> List[bytes]:
         """Serialize PendingPartialWithdrawal fields to list of 32-byte chunks."""
         from ..merkle.core import merkle_root_basic
-        
+
         roots = []
         roots.append(merkle_root_basic(self.validator_index, "uint64"))
         roots.append(merkle_root_basic(self.amount, "uint64"))
@@ -281,6 +300,7 @@ class PendingPartialWithdrawal:
     def merkle_tree(self) -> List[List[bytes]]:
         """Build complete merkle tree for PendingPartialWithdrawal."""
         from ..merkle.core import build_merkle_tree
+
         return build_merkle_tree(self.serialize())
 
     def merkle_root(self) -> bytes:
@@ -290,12 +310,14 @@ class PendingPartialWithdrawal:
     def get_proof(self, index: int) -> List[bytes]:
         """Get merkle proof for field at index."""
         from ..merkle.proof import get_proof
+
         return get_proof(self.merkle_tree(), index)
 
 
 @dataclass
 class BeaconState:
     """BeaconState represents the complete state of the beacon chain."""
+
     genesis_validators_root: bytes
     slot: int
     fork: Fork
@@ -319,7 +341,12 @@ class BeaconState:
         if self.pending_partial_withdrawals is None:
             self.pending_partial_withdrawals = []
 
-    def serialize(self, prev_cycle_block_root: bytes, prev_cycle_state_root: bytes, is_electra: bool = False) -> List[bytes]:
+    def serialize(
+        self,
+        prev_cycle_block_root: bytes = None,
+        prev_cycle_state_root: bytes = None,
+        is_electra: bool = False,
+    ) -> List[bytes]:
         """Serialize BeaconState fields to list of 32-byte chunks."""
         from ..merkle.core import merkle_root_basic
         from ..merkle.encoding import (
@@ -330,35 +357,38 @@ class BeaconState:
             encode_slashings,
             encode_pending_partial_withdrawals_leaf_list,
         )
-        
+
         roots = []
         roots.append(self.genesis_validators_root)
         roots.append(merkle_root_basic(self.slot, "uint64"))
         roots.append(self.fork.merkle_root())
-        
-        # Reset state root for merkleization
-        self.latest_block_header.state_root = int(0).to_bytes(32)
-        roots.append(self.latest_block_header.merkle_root())
-        
-        # Reset state root and block root fields to prev cycle
-        # As per ETH2 spec: https://eth2book.info/capella/part3/transition/
-        self.state_roots[self.slot % BERACHAIN_VECTOR] = prev_cycle_state_root
-        self.block_roots[self.slot % BERACHAIN_VECTOR] = prev_cycle_block_root
-        
+
+        if not is_electra:
+            # Reset state root for merkleization
+            self.latest_block_header.state_root = int(0).to_bytes(32)
+            roots.append(self.latest_block_header.merkle_root())
+
+            # Reset state root and block root fields to prev cycle
+            # As per ETH2 spec: https://eth2book.info/capella/part3/transition/
+            self.state_roots[self.slot % BERACHAIN_VECTOR] = prev_cycle_state_root
+            self.block_roots[self.slot % BERACHAIN_VECTOR] = prev_cycle_block_root
+
         roots.append(encode_block_roots(self.block_roots))
         roots.append(encode_block_roots(self.state_roots))
         roots.append(self.eth1_data.merkle_root())
         roots.append(merkle_root_basic(self.eth1_deposit_index, "uint64"))
         roots.append(self.latest_execution_payload_header.merkle_root())
-        roots.append(encode_validators_leaf_list([v.merkle_root() for v in self.validators]))
+        roots.append(
+            encode_validators_leaf_list([v.merkle_root() for v in self.validators])
+        )
         roots.append(encode_balances(self.balances))
         roots.append(encode_randao_mixes(self.randao_mixes))
         roots.append(merkle_root_basic(self.next_withdrawal_index, "uint64"))
         roots.append(merkle_root_basic(self.next_withdrawal_validator_index, "uint64"))
         roots.append(encode_slashings(self.slashings))
         roots.append(merkle_root_basic(self.total_slashing, "uint64"))
-        
-        if is_electra and self.pending_partial_withdrawals:
+
+        if is_electra:
             roots.append(
                 encode_pending_partial_withdrawals_leaf_list(
                     [p.merkle_root() for p in self.pending_partial_withdrawals]
@@ -366,18 +396,19 @@ class BeaconState:
             )
             # pad to 32 leaves with zero-hash
             roots += [b"\x00" * 32] * 15
-        
+
         return roots
 
     def merkle_tree(self) -> List[List[bytes]]:
         """Build complete merkle tree for BeaconState."""
         from ..merkle.core import build_merkle_tree
+
         return build_merkle_tree(self.serialize())
 
     def merkle_root(self) -> bytes:
         """Calculate SSZ merkle root for BeaconState."""
         from ..merkle.core import merkle_root_container
-        
+
         fields = [
             ("genesis_validators_root", "bytes32"),
             ("slot", "uint64"),
@@ -396,4 +427,4 @@ class BeaconState:
             ("slashings", f"Vector[uint64, {EPOCHS_PER_SLASHINGS_VECTOR}]"),
             ("total_slashing", "uint64"),
         ]
-        return merkle_root_container(self, fields) 
+        return merkle_root_container(self, fields)
