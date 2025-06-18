@@ -319,7 +319,7 @@ class BeaconState:
         if self.pending_partial_withdrawals is None:
             self.pending_partial_withdrawals = []
 
-    def serialize(self, prev_cycle_block_root: bytes, prev_cycle_state_root: bytes, is_electra: bool = False) -> List[bytes]:
+    def serialize(self, prev_cycle_block_root: bytes = None, prev_cycle_state_root: bytes = None, is_electra: bool = False) -> List[bytes]:
         """Serialize BeaconState fields to list of 32-byte chunks."""
         from ..merkle.core import merkle_root_basic
         from ..merkle.encoding import (
@@ -336,14 +336,15 @@ class BeaconState:
         roots.append(merkle_root_basic(self.slot, "uint64"))
         roots.append(self.fork.merkle_root())
         
-        # Reset state root for merkleization
-        self.latest_block_header.state_root = int(0).to_bytes(32)
-        roots.append(self.latest_block_header.merkle_root())
-        
-        # Reset state root and block root fields to prev cycle
-        # As per ETH2 spec: https://eth2book.info/capella/part3/transition/
-        self.state_roots[self.slot % BERACHAIN_VECTOR] = prev_cycle_state_root
-        self.block_roots[self.slot % BERACHAIN_VECTOR] = prev_cycle_block_root
+        if not is_electra:
+            # Reset state root for merkleization
+            self.latest_block_header.state_root = int(0).to_bytes(32)
+            # Reset state root and block root fields to prev cycle
+            # As per ETH2 spec: https://eth2book.info/capella/part3/transition/
+            self.state_roots[self.slot % BERACHAIN_VECTOR] = prev_cycle_state_root
+            self.block_roots[self.slot % BERACHAIN_VECTOR] = prev_cycle_block_root
+
+        roots.append(self.latest_block_header.merkle_root())      
         
         roots.append(encode_block_roots(self.block_roots))
         roots.append(encode_block_roots(self.state_roots))

@@ -39,6 +39,19 @@ class ProofResult:
     root: bytes
     metadata: Dict[str, Any]
 
+@dataclass
+class ProofCombinedResult:
+    """Container for proof generation results."""
+    balance_proof: List[bytes]
+    validator_proof: List[bytes]
+    state_root: bytes
+    balance_leaf: bytes
+    balances_root: bytes
+    validator_index: int
+    header: Dict[str, Any]
+    validator_data: Dict[str, Any]
+    metadata: Dict[str, Any]
+
 
 def generate_validator_proof(state_file: str, validator_index: int, 
                            prev_state_root: Optional[str] = None, 
@@ -256,12 +269,123 @@ def generate_balance_proof(state_file: str, validator_index: int,
     
     return ProofResult(full_proof, state_root, metadata)
 
+def generate_validator_and_balance_proofs(state_file: str, validator_index: int) -> ProofCombinedResult:
+    """Generate a Merkle proofs for a validator and balance."""
+    state = load_and_process_state(state_file)
+    
+    # Generate balance proof within the balances list
+    # Balances are packed 4 per chunk (32 bytes / 8 bytes per uint64)
+    from .ssz.merkle.tree import pack_vector_uint64
+    
+    # Pack all balances into chunks
+    balance_chunks = pack_vector_uint64(state.balances, len(state.balances))
+    
+    # The validator's balance is in chunk at index validator_index // 4
+    chunk_index = validator_index // 4
+    
+    # Calculate the limit for balance chunks
+    limit = (VALIDATOR_REGISTRY_LIMIT * 8 + 31) // 32  # Ceiling division for chunks
+    
+    balance_proof = get_fixed_capacity_proof(
+        balance_chunks,
+        chunk_index,
+        limit
+    )
+    
+    # Add length mixing
+    length_chunk = len(state.balances).to_bytes(32, "little")
+    balance_proof.append(length_chunk)
+    
+    # Recompute balances root using the proof (matching working implementation)
+    balance_leaf = balance_chunks[chunk_index]
+    balances_root = compute_root_from_proof(
+        balance_leaf, chunk_index, balance_proof
+    )
+    
+    # Generate state proof for balances field (field index 10)
+    state_proof_balance = _generate_state_proof(state, field_index=10)
+    
+    # Combine all proofs
+    full_proof_balance = balance_proof + state_proof_balance
+
+    # Generate validator proof within the validators list
+    validator_elements = [v.merkle_root() for v in state.validators]
+    val_proof = get_fixed_capacity_proof(
+        validator_elements,
+        validator_index,
+        VALIDATOR_REGISTRY_LIMIT
+    )
+    
+    # Add length mixing
+    length_chunk = len(validator_elements).to_bytes(32, "little")
+    val_proof.append(length_chunk)
+    
+    # Recompute validators root using the proof (matching working implementation)
+    validator_leaf = validator_elements[validator_index]
+    validators_root = compute_root_from_proof(
+        validator_leaf, validator_index, val_proof
+    )
+    
+    # Generate state proof for validators field (field index 9)
+    state_proof_validator = _generate_state_proof(state, field_index=9)
+    
+    # Combine all proofs
+    full_proof_validator = val_proof + state_proof_validator
+    
+    # Compute final state root
+    state_root = _compute_state_root(state)
+    
+    # Get balance and validator
+    balance = state.balances[validator_index]
+    validator = state.validators[validator_index]
+    
+    # Create ValidatorBalance container
+    validator_balance = ValidatorBalance(
+        validator=validator,
+        balance=balance
+    )
+    
+    metadata = {
+        "balance_proof_length": len(full_proof_balance),
+        "validator_proof_length": len(full_proof_validator),
+        "balance": str(balance),
+        "effective_balance": str(validator.effective_balance),
+        "timestamp": state.latest_execution_payload_header.timestamp,
+        "block_number": state.latest_execution_payload_header.block_number
+    }
+    
+    return ProofCombinedResult(
+        balance_proof=full_proof_balance,
+        validator_proof=full_proof_validator,
+        state_root=state_root,
+        balance_leaf=balance_leaf,
+        balances_root=balances_root,
+        validator_index=validator_index,
+        header={
+            "slot": state.latest_block_header.slot,
+            "proposer_index": state.latest_block_header.proposer_index,
+            "parent_root": f"0x{state.latest_block_header.parent_root.hex()}",
+            "state_root": f"0x{state_root.hex()}",
+            "body_root": f"0x{state.latest_block_header.body_root.hex()}"
+        },
+        validator_data={
+            "pubkey": f"0x{validator.pubkey.hex()}",
+            "withdrawal_credentials": f"0x{validator.withdrawal_credentials.hex()}",
+            "effective_balance": validator.effective_balance,
+            "slashed": validator.slashed,
+            "activation_eligibility_epoch": validator.activation_eligibility_epoch,
+            "activation_epoch": validator.activation_epoch,
+            "exit_epoch": validator.exit_epoch,
+            "withdrawable_epoch": validator.withdrawable_epoch
+        },
+        metadata=metadata
+    )
 
 def _generate_state_proof(
     state: BeaconState, 
     field_index: int, 
-    prev_state_root: bytes, 
-    prev_block_root: bytes
+    prev_state_root: bytes = None, 
+    prev_block_root: bytes = None
 ) -> List[bytes]:
     """
     Generate proof for a field within BeaconState.

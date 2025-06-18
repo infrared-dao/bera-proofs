@@ -27,7 +27,7 @@ from src.api.beacon_client import BeaconAPIClient, BeaconAPIError
 from src.api.rest_api import run_server
 from src.visualize_merkle import visualize_merkle_proof, demo_visualization
 from src.ssz.containers.utils import load_and_process_state
-from src.main import generate_validator_proof, generate_balance_proof
+from src.main import generate_validator_proof, generate_balance_proof, generate_validator_and_balance_proofs
 
 # Configure rich console
 console = Console()
@@ -334,6 +334,90 @@ def balance(validator_index: int, json_file: str = None, historical_state_file: 
                         "type": "balance_proof"
                     }
                 }
+            finally:
+                # Clean up temp file
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
+        
+        print(format_proof_result(output))
+        
+    except Exception as e:
+        logger.error(f"Error generating balance proof: {e}")
+        raise click.ClickException(str(e))
+
+
+@cli.command()
+@click.argument('validator_index', type=int)
+@click.option('--json-file', type=str, help='Path to current beacon state JSON file')
+@click.option('--slot', type=int, help='Slot number for API queries (defaults to head)')
+@click.option('--auto-fetch', is_flag=True, default=True, help='Auto-fetch historical data from API if not provided via other options')
+def combine(validator_index: int, json_file: str = None, historical_state_file: str = None, slot: int = None,
+            prev_state_root: str = None, prev_block_root: str = None, auto_fetch: bool = True):
+    """
+    Generate a validator and balance proof.
+    
+    VALIDATOR_INDEX: Index of the validator balance to prove
+    
+    Historical Data Options (choose one):
+    
+    1. --historical-state-file: Provide a state file from 8 slots ago
+       Example: --historical-state-file historical_state.json
+    
+    2. --prev-state-root and --prev-block-root: Provide explicit hex values
+       Example: --prev-state-root 0x123... --prev-block-root 0x456...
+    
+    3. --auto-fetch: Let the tool fetch historical data from the beacon API
+       (Default behavior when using API mode)
+    """
+    try: 
+        if json_file:           
+            # Use local JSON file directly
+            result = generate_validator_and_balance_proofs(json_file, validator_index)
+            
+            # Format for JSON output
+            output = {
+                "balance_proof": [f"0x{step.hex()}" for step in result.balance_proof],
+                "validator_proof": [f"0x{step.hex()}" for step in result.validator_proof],
+                "state_root": f"0x{result.state_root.hex()}",
+                "balance_leaf": f"0x{result.balance_leaf.hex()}",
+                "balances_root": f"0x{result.balances_root.hex()}",
+                "validator_index": result.validator_index,
+                "header": {**result.header},
+                "validator_data": {**result.validator_data},
+                "metadata": {
+                    **result.metadata
+                }
+            }
+
+        else:
+            # Use API with optional auto-fetching
+            beacon_client = BeaconAPIClient()
+            slot_id = slot if slot is not None else "head"
+            
+            # Get state data and save to temp file
+            state_response = beacon_client.get_state(slot_id)
+            
+            temp_file = "temp_state.json"
+            with open(temp_file, "w") as f:
+                json.dump(state_response, f)
+            
+            try:
+                result = generate_validator_and_balance_proofs(temp_file, validator_index)
+                
+                # Format for JSON output
+                output = {
+                "balance_proof": [f"0x{step.hex()}" for step in result.balance_proof],
+                "validator_proof": [f"0x{step.hex()}" for step in result.validator_proof],
+                "state_root": f"0x{result.state_root.hex()}",
+                "balance_leaf": f"0x{result.balance_leaf.hex()}",
+                "balances_root": f"0x{result.balances_root.hex()}",
+                "validator_index": result.validator_index,
+                "header": {**result.header},
+                "validator_data": {**result.validator_data},
+                "metadata": {
+                    **result.metadata
+                }
+            }
             finally:
                 # Clean up temp file
                 if os.path.exists(temp_file):
