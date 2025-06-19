@@ -127,7 +127,7 @@ class ValidatorProofResponse(ProofResponse):
     proof_type: str = Field(default="validator", description="Proof type")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "proof": ["0x1234...", "0x5678..."],
                 "root": "0xabcd...",
@@ -147,7 +147,7 @@ class BalanceProofResponse(ProofResponse):
     proof_type: str = Field(default="balance", description="Proof type")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "proof": ["0x1234...", "0x5678..."],
                 "root": "0xabcd...",
