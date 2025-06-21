@@ -352,7 +352,7 @@ def balance(validator_index: int, json_file: str = None, historical_state_file: 
 @click.option('--slot', type=int, help='Slot number for API queries (defaults to head)')
 @click.option('--auto-fetch', is_flag=True, default=True, help='Auto-fetch historical data from API if not provided via other options')
 def combine(validator_index: int, json_file: str = None, historical_state_file: str = None, slot: int = None,
-            prev_state_root: str = None, prev_block_root: str = None, auto_fetch: bool = True):
+            prev_state_root: str = None, prev_block_root: str = None, auto_fetch: bool = True) -> Dict[str, Any]:
     """
     Generate a validator and balance proof.
     
@@ -424,6 +424,7 @@ def combine(validator_index: int, json_file: str = None, historical_state_file: 
                     os.unlink(temp_file)
         
         print(format_proof_result(output))
+        return output
         
     except Exception as e:
         logger.error(f"Error generating balance proof: {e}")
