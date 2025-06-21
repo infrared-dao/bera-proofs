@@ -9,7 +9,7 @@ and generating merkle proofs. It includes:
 - Endpoints: FastAPI router with proof generation endpoints
 
 Usage:
-    from src.api import BeaconAPIClient, ProofService
+    from bera_proofs.api import BeaconAPIClient, ProofService
     
     client = BeaconAPIClient()
     state = client.get_beacon_state("head")

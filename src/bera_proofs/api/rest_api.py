@@ -324,7 +324,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8000, dev: bool = False):
     """
     logger.info(f"Starting Bera Proofs API server on {host}:{port}")
     uvicorn.run(
-        "src.api.rest_api:app" if not dev else app,
+        "bera_proofs.api.rest_api:app" if not dev else app,
         host=host,
         port=port,
         reload=dev,
