@@ -15,11 +15,11 @@ cd bera-proofs
 poetry install
 
 # Generate proofs with CLI
-poetry run python -m src.cli validator 5 \
+poetry run python -m bera_proofs.cli validator 5 \
   --json-file test/data/state.json \
   --historical-state-file test/data/state-8.json
 
-poetry run python -m src.cli balance 5 \
+poetry run python -m bera_proofs.cli balance 5 \
   --json-file test/data/state.json \
   --historical-state-file test/data/state-8.json
 ```
@@ -74,17 +74,17 @@ The CLI works with local JSON files and provides reliable, offline proof generat
 ### Basic Commands
 ```bash
 # Get help
-poetry run python -m src.cli --help
-poetry run python -m src.cli validator --help
-poetry run python -m src.cli balance --help
+poetry run python -m bera_proofs.cli --help
+poetry run python -m bera_proofs.cli validator --help
+poetry run python -m bera_proofs.cli balance --help
 
 # Generate validator proof
-poetry run python -m src.cli validator 5 \
+poetry run python -m bera_proofs.cli validator 5 \
   --json-file current_state.json \
   --historical-state-file historical_state.json
 
 # Generate balance proof  
-poetry run python -m src.cli balance 5 \
+poetry run python -m bera_proofs.cli balance 5 \
   --json-file current_state.json \
   --historical-state-file historical_state.json
 ```
@@ -92,11 +92,11 @@ poetry run python -m src.cli balance 5 \
 ### Using Test Data
 ```bash
 # Quick test with included test data
-poetry run python -m src.cli validator 5 \
+poetry run python -m bera_proofs.cli validator 5 \
   --json-file test/data/state.json \
   --historical-state-file test/data/state-8.json
 
-poetry run python -m src.cli balance 5 \
+poetry run python -m bera_proofs.cli balance 5 \
   --json-file test/data/state.json \
   --historical-state-file test/data/state-8.json
 ```
@@ -108,7 +108,7 @@ Berachain requires historical state data from 8 slots ago for proof generation. 
 ### 📁 Historical State Files (Recommended)
 Use two state files - current and historical:
 ```bash
-poetry run python -m src.cli validator 0 \
+poetry run python -m bera_proofs.cli validator 0 \
   --json-file current_state.json \
   --historical-state-file historical_state.json
 ```
@@ -116,7 +116,7 @@ poetry run python -m src.cli validator 0 \
 ### ⚙️ Manual Historical Roots
 Provide specific historical roots if you don't have historical state files:
 ```bash
-poetry run python -m src.cli validator 0 \
+poetry run python -m bera_proofs.cli validator 0 \
   --json-file current_state.json \
   --prev-state-root 0x01ef6767e8908883d1e84e91095bbb3f7d98e33773d13b6cc949355909365ff8 \
   --prev-block-root 0x28925c02852c6462577e73cc0fdb0f49bbf910b559c8c0d1b8f69cac38fa3f74
@@ -126,7 +126,7 @@ poetry run python -m src.cli validator 0 \
 When using test data, the CLI automatically uses appropriate test defaults:
 ```bash
 # CLI uses test defaults automatically
-poetry run python -m src.cli validator 0 --json-file test/data/state.json
+poetry run python -m bera_proofs.cli validator 0 --json-file test/data/state.json
 ```
 
 ## 🧪 Testing

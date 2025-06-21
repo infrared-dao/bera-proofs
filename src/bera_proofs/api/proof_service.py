@@ -9,9 +9,9 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from src.main import generate_validator_proof, generate_balance_proof, ProofResult
-from src.ssz import load_and_process_state, BeaconState
-from src.api.beacon_client import BeaconAPIClient, BeaconAPIError
+from bera_proofs.main import generate_validator_proof, generate_balance_proof, ProofResult
+from bera_proofs.ssz import load_and_process_state, BeaconState
+from bera_proofs.api.beacon_client import BeaconAPIClient, BeaconAPIError
 
 logger = logging.getLogger(__name__)
 

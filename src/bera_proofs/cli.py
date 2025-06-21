@@ -22,12 +22,12 @@ from rich.syntax import Syntax
 # Add src to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.api.proof_service import ProofService, ProofServiceError
-from src.api.beacon_client import BeaconAPIClient, BeaconAPIError
-from src.api.rest_api import run_server
-from src.visualize_merkle import visualize_merkle_proof, demo_visualization
-from src.ssz.containers.utils import load_and_process_state
-from src.main import generate_validator_proof, generate_balance_proof, generate_validator_and_balance_proofs
+from bera_proofs.api.proof_service import ProofService, ProofServiceError
+from bera_proofs.api.beacon_client import BeaconAPIClient, BeaconAPIError
+from bera_proofs.api.rest_api import run_server
+from bera_proofs.visualize_merkle import visualize_merkle_proof, demo_visualization
+from bera_proofs.ssz.containers.utils import load_and_process_state
+from bera_proofs.main import generate_validator_proof, generate_balance_proof, generate_validator_and_balance_proofs
 
 # Configure rich console
 console = Console()
@@ -472,7 +472,7 @@ def visualize(ctx, json_file: Optional[str], validator_index: Optional[int]):
             demo_visualization()
         else:
             console.print("[cyan]Showing Merkle tree structure...[/cyan]")
-            from src.visualize_merkle import create_simple_tree_diagram
+            from bera_proofs.visualize_merkle import create_simple_tree_diagram
             create_simple_tree_diagram()
             
     except Exception as e:

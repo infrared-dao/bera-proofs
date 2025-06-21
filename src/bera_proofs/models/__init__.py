@@ -9,7 +9,7 @@ It includes Pydantic models for validation and serialization of:
 - Error responses and status models
 
 Usage:
-    from src.models import ProofRequest, ProofResponse
+    from bera_proofs.models import ProofRequest, ProofResponse
     
     request = ProofRequest(val_index=42, slot="head")
 """

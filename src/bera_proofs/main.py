@@ -25,7 +25,7 @@ from .ssz import (
     VALIDATOR_REGISTRY_LIMIT
 )
 
-from src.ssz.merkle import (
+from bera_proofs.ssz.merkle import (
     get_fixed_capacity_proof,
     merkle_list_tree
 )

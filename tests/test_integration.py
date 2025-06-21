@@ -13,7 +13,7 @@ from typing import List
 # Add parent directory to path for imports  
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from src.main import generate_validator_proof
+from bera_proofs.main import generate_validator_proof
 
 class TestIntegration(unittest.TestCase):
     """
