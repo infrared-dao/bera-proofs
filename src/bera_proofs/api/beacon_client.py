@@ -70,8 +70,10 @@ class BeaconAPIClient:
             data = response.json()
             if 'data' not in data:
                 raise BeaconAPIError(f"Invalid response format: missing 'data' field")
-                
-            state_data = data['data']
+            
+            # return in same format as raw request for same processing later
+            # state_data = data['data']
+            state_data = data
             logger.info(f"Successfully fetched beacon state for slot {slot}")
             
             # Sanitize the data
