@@ -30,14 +30,31 @@ class BeaconAPIClient:
     with proper error handling and data sanitization.
     """
     
-    def __init__(self, base_url: Optional[str] = None):
+    def __init__(self, base_url: Optional[str] = None, network: Optional[str] = None):
         """
         Initialize the beacon API client.
         
         Args:
-            base_url: Base URL for the beacon API. If None, uses BEACON_RPC_URL env var.
+            base_url: Base URL for the beacon API. If None, uses env vars.
+            network: Network to use ('mainnet' or 'testnet'). If None, uses BEACON_NETWORK env var.
         """
-        self.base_url = base_url or os.getenv('BEACON_RPC_URL', 'http://35.246.217.85:3500')
+        # Determine network
+        network = network or os.getenv('BEACON_NETWORK', 'testnet')
+        
+        # Set base URL based on network
+        if base_url:
+            self.base_url = base_url
+        else:
+            if network.lower() == 'mainnet':
+                self.base_url = os.getenv('BEACON_RPC_URL_MAINNET')
+                if not self.base_url:
+                    raise ValueError("BEACON_RPC_URL_MAINNET environment variable is not set")
+            else:
+                self.base_url = os.getenv('BEACON_RPC_URL_TESTNET')
+                if not self.base_url:
+                    raise ValueError("BEACON_RPC_URL_TESTNET environment variable is not set")
+        
+        self.network = network
         
         self.session = requests.Session()
         self.session.headers.update({

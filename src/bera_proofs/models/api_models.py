@@ -15,15 +15,32 @@ class ProofRequest(BaseModel):
     Request model for proof generation endpoints.
     
     Attributes:
-        val_index: Validator index for proof generation
+        identifier: Validator identifier - either index (e.g., "0", "123") or pubkey (e.g., "0x...")
         slot: Slot identifier ("head", "finalized", or specific slot number)
         prev_state_root: Optional previous state root from 8 slots ago (hex string)
         prev_block_root: Optional previous block root from 8 slots ago (hex string)
     """
-    val_index: int = Field(..., ge=0, description="Validator index (must be >= 0)")
+    identifier: str = Field(..., description="Validator index or pubkey (hex string with 0x prefix)")
     slot: str = Field(default="head", description="Slot identifier")
     prev_state_root: Optional[str] = Field(default=None, description="Previous state root from 8 slots ago (hex string)")
     prev_block_root: Optional[str] = Field(default=None, description="Previous block root from 8 slots ago (hex string)")
+    
+    @validator('identifier')
+    def validate_identifier(cls, v):
+        """Validate identifier is either a number or hex pubkey."""
+        if not v:
+            raise ValueError("Identifier cannot be empty")
+        # Check if it's a pubkey (hex string)
+        if v.startswith('0x'):
+            if len(v) != 98:  # 0x + 96 hex chars
+                raise ValueError("Pubkey must be 48 bytes (96 hex chars) with 0x prefix")
+        else:
+            # Must be a number
+            try:
+                int(v)
+            except ValueError:
+                raise ValueError("Identifier must be a number or hex pubkey starting with 0x")
+        return v
     
     @validator('slot')
     def validate_slot(cls, v):
@@ -55,6 +72,7 @@ class ProofResponse(BaseModel):
         proof: List of proof steps as hex strings
         root: Merkle root as hex string
         validator_index: Validator index used
+        validator_pubkey: Validator public key (optional)
         slot: Slot used for proof generation
         proof_type: Type of proof generated
         metadata: Additional metadata about the proof
@@ -62,6 +80,7 @@ class ProofResponse(BaseModel):
     proof: List[str] = Field(..., description="List of proof steps as hex strings")
     root: str = Field(..., description="Merkle root as hex string")
     validator_index: int = Field(..., description="Validator index used")
+    validator_pubkey: Optional[str] = Field(None, description="Validator public key")
     slot: str = Field(..., description="Slot used for proof generation")
     proof_type: str = Field(..., description="Type of proof (validator/balance/proposer)")
     metadata: dict = Field(default_factory=dict, description="Additional proof metadata")
@@ -114,12 +133,28 @@ class HealthResponse(BaseModel):
 
 class ValidatorProofRequest(ProofRequest):
     """Request model specifically for validator proof generation."""
-    pass
+    # For backward compatibility
+    val_index: Optional[int] = Field(None, description="Deprecated: Use 'identifier' instead")
+    
+    @validator('identifier', pre=True, always=True)
+    def handle_backward_compatibility(cls, v, values):
+        """Handle backward compatibility with val_index."""
+        if v is None and 'val_index' in values and values['val_index'] is not None:
+            return str(values['val_index'])
+        return v
 
 
 class BalanceProofRequest(ProofRequest):
     """Request model specifically for balance proof generation."""
-    pass
+    # For backward compatibility
+    val_index: Optional[int] = Field(None, description="Deprecated: Use 'identifier' instead")
+    
+    @validator('identifier', pre=True, always=True)
+    def handle_backward_compatibility(cls, v, values):
+        """Handle backward compatibility with val_index."""
+        if v is None and 'val_index' in values and values['val_index'] is not None:
+            return str(values['val_index'])
+        return v
 
 
 class ValidatorProofResponse(ProofResponse):
@@ -132,6 +167,7 @@ class ValidatorProofResponse(ProofResponse):
                 "proof": ["0x1234...", "0x5678..."],
                 "root": "0xabcd...",
                 "validator_index": 42,
+                "validator_pubkey": "0x957004733f0c4d7e51b4f1ac3f1c08247f9c5455d302b669c723eb80d8c286515b5623757a9053a5a7b8c17ee3feed4b",
                 "slot": "head",
                 "proof_type": "validator",
                 "metadata": {
@@ -152,6 +188,7 @@ class BalanceProofResponse(ProofResponse):
                 "proof": ["0x1234...", "0x5678..."],
                 "root": "0xabcd...",
                 "validator_index": 42,
+                "validator_pubkey": "0x957004733f0c4d7e51b4f1ac3f1c08247f9c5455d302b669c723eb80d8c286515b5623757a9053a5a7b8c17ee3feed4b",
                 "slot": "head", 
                 "proof_type": "balance",
                 "metadata": {

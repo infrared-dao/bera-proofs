@@ -34,9 +34,42 @@ class ProofService:
         """
         self.beacon_client = beacon_client
     
+    def resolve_validator_identifier(self, identifier: str, validators: List[Dict[str, Any]]) -> int:
+        """
+        Resolve a validator identifier (index or pubkey) to a validator index.
+        
+        Args:
+            identifier: Either a validator index (e.g., "0", "123") or pubkey (e.g., "0x...")
+            validators: List of validator objects from beacon state
+            
+        Returns:
+            Validator index as integer
+            
+        Raises:
+            ProofServiceError: If identifier is invalid or validator not found
+        """
+        # Check if it's a hex pubkey
+        if identifier.startswith('0x') and len(identifier) == 98:  # 48 bytes = 96 hex chars + 0x
+            # Search for validator by pubkey
+            pubkey_lower = identifier.lower()
+            for idx, validator in enumerate(validators):
+                if validator.get('pubkey', '').lower() == pubkey_lower:
+                    logger.info(f"Resolved pubkey {identifier} to validator index {idx}")
+                    return idx
+            raise ProofServiceError(f"Validator with pubkey {identifier} not found")
+        else:
+            # Try to parse as integer index
+            try:
+                val_index = int(identifier)
+                if val_index < 0 or val_index >= len(validators):
+                    raise ProofServiceError(f"Validator index {val_index} out of range (0-{len(validators)-1})")
+                return val_index
+            except ValueError:
+                raise ProofServiceError(f"Invalid validator identifier: {identifier}. Must be a number or hex pubkey starting with 0x")
+    
     def get_validator_proof(
         self, 
-        val_index: int,
+        identifier: str,
         prev_state_root: Optional[str] = None,
         prev_block_root: Optional[str] = None,
         slot: str = "head"
@@ -45,7 +78,7 @@ class ProofService:
         Generate a validator proof using auto-fetched beacon chain data.
         
         Args:
-            val_index: Index of the validator to prove
+            identifier: Validator index or pubkey (hex string with 0x prefix)
             prev_state_root: Previous state root from 8 slots ago (hex string, optional)
             prev_block_root: Previous block root from 8 slots ago (hex string, optional)
             slot: Slot number for API queries (defaults to "head")
@@ -67,6 +100,10 @@ class ProofService:
             
             state_data = self.beacon_client.get_state(slot)
             current_slot = int(state_data.get('slot', '0'), 16 if isinstance(state_data.get('slot'), str) and state_data.get('slot').startswith('0x') else 10)
+            
+            # Resolve identifier to validator index
+            validators = state_data.get('validators', [])
+            val_index = self.resolve_validator_identifier(identifier, validators)
             
             # Auto-fetch historical data if not provided
             if prev_state_root is None or prev_block_root is None:
@@ -94,6 +131,7 @@ class ProofService:
                 "proof": [f"0x{step.hex()}" for step in result.proof],
                 "root": f"0x{result.root.hex()}",
                 "validator_index": val_index,
+                "validator_pubkey": validators[val_index].get('pubkey') if val_index < len(validators) else None,
                 "slot": slot,
                 "proof_type": "validator",
                 "metadata": result.metadata,
@@ -116,7 +154,7 @@ class ProofService:
     
     def get_balances_proof(
         self, 
-        val_index: int,
+        identifier: str,
         prev_state_root: Optional[str] = None,
         prev_block_root: Optional[str] = None,
         slot: str = "head"
@@ -125,7 +163,7 @@ class ProofService:
         Generate a validator balance proof using auto-fetched beacon chain data.
         
         Args:
-            val_index: Index of the validator balance to prove
+            identifier: Validator index or pubkey (hex string with 0x prefix)
             prev_state_root: Previous state root from 8 slots ago (hex string, optional)
             prev_block_root: Previous block root from 8 slots ago (hex string, optional)
             slot: Slot number for API queries (defaults to "head")
@@ -147,6 +185,10 @@ class ProofService:
             
             state_data = self.beacon_client.get_state(slot)
             current_slot = int(state_data.get('slot', '0'), 16 if isinstance(state_data.get('slot'), str) and state_data.get('slot').startswith('0x') else 10)
+            
+            # Resolve identifier to validator index
+            validators = state_data.get('validators', [])
+            val_index = self.resolve_validator_identifier(identifier, validators)
             
             # Auto-fetch historical data if not provided
             if prev_state_root is None or prev_block_root is None:
@@ -174,6 +216,7 @@ class ProofService:
                 "proof": [f"0x{step.hex()}" for step in result.proof],
                 "root": f"0x{result.root.hex()}",
                 "validator_index": val_index,
+                "validator_pubkey": validators[val_index].get('pubkey') if val_index < len(validators) else None,
                 "slot": slot,
                 "proof_type": "balance",
                 "metadata": result.metadata,

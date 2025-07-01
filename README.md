@@ -14,14 +14,18 @@ git clone <repository-url>
 cd bera-proofs
 poetry install
 
-# Generate proofs with CLI
-poetry run python -m bera_proofs.cli validator 5 \
+# Option 1: Generate proofs with CLI
+poetry run python -m src.cli validator 5 \
   --json-file test/data/state.json \
   --historical-state-file test/data/state-8.json
 
-poetry run python -m bera_proofs.cli balance 5 \
-  --json-file test/data/state.json \
-  --historical-state-file test/data/state-8.json
+# Option 2: Start the API server
+poetry run python -m src.cli serve
+
+# Option 3: Use the API
+curl -X POST http://localhost:8000/proofs/validator \
+  -H "Content-Type: application/json" \
+  -d '{"identifier": "5", "slot": "head"}'
 ```
 
 **Response Example:**
@@ -50,12 +54,16 @@ poetry run python -m bera_proofs.cli balance 5 \
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌──────────────┐
-│     CLI     │────▶│ Proof Gen   │────▶│ SSZ Library  │
-└─────────────┘     └─────────────┘     └──────────────┘
-        │                    │                     │
-        ▼                    ▼                     ▼
+│   REST API  │────▶│ Proof       │────▶│ SSZ Library  │
+└─────────────┘     │ Service     │     └──────────────┘
+                    └─────────────┘              │
+┌─────────────┐            │                     ▼
+│     CLI     │────────────┘            ┌──────────────┐
+└─────────────┘                         │ Merkle Trees │
+        │                               └──────────────┘
+        ▼                                        
 ┌─────────────┐     ┌─────────────┐     ┌──────────────┐
-│ JSON Files  │     │ Test Data   │     │ Merkle Trees │
+│ JSON Files  │     │ Beacon API  │     │  Test Data   │
 └─────────────┘     └─────────────┘     └──────────────┘
 ```
 
@@ -100,6 +108,75 @@ poetry run python -m bera_proofs.cli balance 5 \
   --json-file test/data/state.json \
   --historical-state-file test/data/state-8.json
 ```
+
+## 🌐 REST API Usage
+
+The REST API provides proof generation via HTTP endpoints with automatic beacon chain data fetching.
+
+### Starting the API Server
+```bash
+# Start with default settings (port 8000)
+poetry run python -m src.cli serve
+
+# Custom port and host
+poetry run python -m src.cli serve --port 8080 --host 0.0.0.0
+
+# Enable development mode with auto-reload
+poetry run python -m src.cli serve --dev
+```
+
+### API Configuration
+Configure the API via environment variables. Copy `.env.example` to `.env` and update:
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env to set your configuration
+# - BEACON_NETWORK: Choose 'testnet' or 'mainnet'
+# - BEACON_RPC_URL_TESTNET: Set testnet beacon URL
+# - BEACON_RPC_URL_MAINNET: Set mainnet beacon URL
+```
+
+### Making API Requests
+
+#### Validator Proof
+```bash
+# Using validator index
+curl -X POST http://localhost:8000/proofs/validator \
+  -H "Content-Type: application/json" \
+  -d '{"identifier": "5", "slot": "head"}'
+
+# Using validator pubkey
+curl -X POST http://localhost:8000/proofs/validator \
+  -H "Content-Type: application/json" \
+  -d '{"identifier": "0x957004733f0c4d7e51b4f1ac3f1c08247f9c5455d302b669c723eb80d8c286515b5623757a9053a5a7b8c17ee3feed4b"}'
+```
+
+#### Balance Proof
+```bash
+# GET request (convenient for simple integrations)
+curl http://localhost:8000/proofs/balance/5?slot=head
+
+# POST request with full options
+curl -X POST http://localhost:8000/proofs/balance \
+  -H "Content-Type: application/json" \
+  -d '{
+    "identifier": "5",
+    "slot": "head",
+    "prev_state_root": "0x01ef6767...",
+    "prev_block_root": "0x28925c02..."
+  }'
+```
+
+### API Features
+- **🔍 Validator Identification**: Support for both index and pubkey
+- **🔄 Auto-fetch**: Automatically retrieves beacon chain data
+- **📝 OpenAPI Docs**: Interactive documentation at `/docs`
+- **🌍 CORS Enabled**: Ready for cross-origin requests
+- **📊 Health Checks**: Monitor API and beacon node status
+
+### API Documentation
+Visit `http://localhost:8000/docs` for interactive OpenAPI documentation.
 
 ## 🕰️ Historical Data Requirements
 
@@ -187,11 +264,18 @@ bera-proofs/
 │   ├── main.py                 # Core proof generation
 │   ├── cli.py                  # Command-line interface
 │   ├── visualize_merkle.py     # Visualization tools
+│   ├── api/                    # REST API implementation
+│   │   ├── rest_api.py        # FastAPI endpoints
+│   │   ├── proof_service.py   # Proof generation service
+│   │   └── beacon_client.py   # Beacon chain integration
+│   ├── models/                 # Data models
+│   │   └── api_models.py      # Request/response models
 │   └── ssz/                    # Modular SSZ library
 ├── test/data/                  # Test state files
 │   ├── state.json             # Current state example
 │   └── state-8.json           # Historical state example
 ├── tests/                      # Test suite
+├── @ai_docs/                   # API documentation
 └── README.md
 ```
 
@@ -201,7 +285,8 @@ bera-proofs/
 - ✅ **Proof Generation**: Working with Berachain SSZ
 - ✅ **Test Suite**: Comprehensive coverage
 - ✅ **Visualization**: Interactive proof exploration
-- 🚧 **API**: Under development
+- ✅ **REST API**: Production-ready with validator identification by index or pubkey
+- ✅ **Beacon Integration**: Supports both testnet and mainnet
 
 ## 📄 License
 

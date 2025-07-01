@@ -177,6 +177,10 @@ async def generate_validator_proof(
     beacon state at the given slot. The proof can be verified against the
     state root to confirm the validator's presence.
     
+    The validator can be identified by either:
+    - Index: numeric index (e.g., "0", "123")
+    - Public key: hex string with 0x prefix (e.g., "0x957004...")
+    
     All data is automatically fetched from the beacon chain API.
     
     **Proof Structure:**
@@ -190,7 +194,7 @@ async def generate_validator_proof(
     """
     try:
         result = service.get_validator_proof(
-            val_index=request.val_index,
+            identifier=request.identifier,
             prev_state_root=request.prev_state_root,
             prev_block_root=request.prev_block_root,
             slot=request.slot
@@ -199,7 +203,8 @@ async def generate_validator_proof(
         return ValidatorProofResponse(
             proof=result["proof"],
             root=result["root"],
-            validator_index=request.val_index,
+            validator_index=result["validator_index"],
+            validator_pubkey=result.get("validator_pubkey"),
             slot=request.slot,
             proof_type="validator",
             metadata=result["metadata"]
@@ -223,6 +228,10 @@ async def generate_balance_proof(
     beacon state at the given slot. The proof includes both the precise balance
     and effective balance.
     
+    The validator can be identified by either:
+    - Index: numeric index (e.g., "0", "123")
+    - Public key: hex string with 0x prefix (e.g., "0x957004...")
+    
     All data is automatically fetched from the beacon chain API.
     
     **Proof Structure:**
@@ -236,7 +245,7 @@ async def generate_balance_proof(
     """
     try:
         result = service.get_balances_proof(
-            val_index=request.val_index,
+            identifier=request.identifier,
             prev_state_root=request.prev_state_root,
             prev_block_root=request.prev_block_root,
             slot=request.slot
@@ -245,7 +254,8 @@ async def generate_balance_proof(
         return BalanceProofResponse(
             proof=result["proof"],
             root=result["root"],
-            validator_index=request.val_index,
+            validator_index=result["validator_index"],
+            validator_pubkey=result.get("validator_pubkey"),
             slot=request.slot,
             proof_type="balance",
             metadata=result["metadata"]
@@ -257,9 +267,9 @@ async def generate_balance_proof(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/proofs/validator/{val_index}")
+@app.get("/proofs/validator/{identifier}")
 async def generate_validator_proof_get(
-    val_index: int,
+    identifier: str,
     slot: str = "head",
     prev_state_root: Optional[str] = None,
     prev_block_root: Optional[str] = None,
@@ -269,10 +279,13 @@ async def generate_validator_proof_get(
     Generate validator proof via GET request (convenience endpoint).
     
     Same functionality as POST endpoint but accessible via GET for simple integrations.
+    
+    Args:
+        identifier: Validator index (e.g., "0", "123") or pubkey (e.g., "0x...")
     """
     try:
         result = service.get_validator_proof(
-            val_index=val_index,
+            identifier=identifier,
             prev_state_root=prev_state_root,
             prev_block_root=prev_block_root,
             slot=slot
@@ -285,9 +298,9 @@ async def generate_validator_proof_get(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/proofs/balance/{val_index}")
+@app.get("/proofs/balance/{identifier}")
 async def generate_balance_proof_get(
-    val_index: int,
+    identifier: str,
     slot: str = "head",
     prev_state_root: Optional[str] = None,
     prev_block_root: Optional[str] = None,
@@ -297,10 +310,13 @@ async def generate_balance_proof_get(
     Generate balance proof via GET request (convenience endpoint).
     
     Same functionality as POST endpoint but accessible via GET for simple integrations.
+    
+    Args:
+        identifier: Validator index (e.g., "0", "123") or pubkey (e.g., "0x...")
     """
     try:
         result = service.get_balances_proof(
-            val_index=val_index,
+            identifier=identifier,
             prev_state_root=prev_state_root,
             prev_block_root=prev_block_root,
             slot=slot
