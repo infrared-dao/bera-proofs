@@ -265,7 +265,8 @@ class BeaconAPIClient:
             True if API is accessible, False otherwise
         """
         try:
-            url = f"{self.base_url}/eth/v1/node/health"
+            # Use beacon headers endpoint which is implemented on Berachain
+            url = f"{self.base_url}/eth/v1/beacon/headers/head"
             response = self.session.get(url, timeout=10)
             return response.status_code == 200
         except Exception:

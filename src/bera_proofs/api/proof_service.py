@@ -116,7 +116,7 @@ class ProofService:
                 logger.info(f"Auto-fetched historical data: state_root={prev_state_root}, block_root={prev_block_root}")
             
             with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                json.dump(state_data, f)
+                json.dump({"data": state_data}, f)
                 temp_file = f.name
             
             try:
@@ -201,7 +201,7 @@ class ProofService:
                 logger.info(f"Auto-fetched historical data: state_root={prev_state_root}, block_root={prev_block_root}")
             
             with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                json.dump(state_data, f)
+                json.dump({"data": state_data}, f)
                 temp_file = f.name
             
             try:

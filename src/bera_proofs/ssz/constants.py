@@ -40,7 +40,7 @@ BERACHAIN_VECTOR = 8
 
 # Maximum number of validators that can be registered
 # Used for validators and balances lists in BeaconState
-MAX_VALIDATORS = 69  # Note: This appears to be a test value, production would be much higher
+MAX_VALIDATORS = 1000000  # Set high enough to not limit beacon state processing
 
 # Maximum capacity for the validator registry
 # Production limit from the Ethereum specification
