@@ -45,8 +45,8 @@ class ProofRequest(BaseModel):
     @validator('slot')
     def validate_slot(cls, v):
         """Validate slot parameter."""
-        if v not in ["head", "finalized"] and not v.isdigit():
-            raise ValueError("Slot must be 'head', 'finalized', or a valid number")
+        if v not in ["head", "finalized", "recent"] and not v.isdigit():
+            raise ValueError("Slot must be 'head', 'finalized', 'recent', or a valid number")
         return v
     
     @validator('prev_state_root')
@@ -194,6 +194,91 @@ class BalanceProofResponse(ProofResponse):
                 "metadata": {
                     "proof_length": 45,
                     "balance": "32000000000"
+                }
+            }
+        }
+
+
+class CombinedProofRequest(ProofRequest):
+    """Request model for combined validator and balance proof generation."""
+    pass
+
+
+class CombinedProofResponse(BaseModel):
+    """
+    Response model for combined validator and balance proofs.
+    
+    Attributes:
+        balance_proof: List of balance proof steps as hex strings
+        validator_proof: List of validator proof steps as hex strings
+        state_root: State root as hex string
+        balance_leaf: Balance leaf value as hex string
+        balances_root: Balances merkle root as hex string
+        validator_index: Validator index used
+        header: Block header information
+        validator_data: Validator data
+        metadata: Additional metadata including timestamp
+    """
+    balance_proof: List[str] = Field(..., description="List of balance proof steps as hex strings")
+    validator_proof: List[str] = Field(..., description="List of validator proof steps as hex strings")
+    state_root: str = Field(..., description="State root as hex string")
+    balance_leaf: str = Field(..., description="Balance leaf value as hex string")
+    balances_root: str = Field(..., description="Balances merkle root as hex string")
+    validator_index: int = Field(..., description="Validator index")
+    header: dict = Field(..., description="Block header information")
+    validator_data: dict = Field(..., description="Validator data")
+    metadata: dict = Field(default_factory=dict, description="Additional proof metadata")
+    
+    @validator('balance_proof', 'validator_proof')
+    def validate_proof_format(cls, v):
+        """Validate proof steps are proper hex strings."""
+        for step in v:
+            if not isinstance(step, str) or not step.startswith('0x'):
+                raise ValueError("All proof steps must be hex strings starting with '0x'")
+        return v
+    
+    @validator('state_root', 'balance_leaf', 'balances_root')
+    def validate_hex_format(cls, v):
+        """Validate hex string format."""
+        if not v.startswith('0x'):
+            raise ValueError("Must be a hex string starting with '0x'")
+        return v
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "balance_proof": ["0x1234...", "0x5678..."],
+                "validator_proof": ["0xabcd...", "0xef01..."],
+                "state_root": "0x7aac2bab3ed70e35ba9123b739f6375caed3b51c8c947703087b911d54b0cc9f",
+                "balance_leaf": "0x00a0724e1809000000e038035059080000a0724e18090000b00e267154151500",
+                "balances_root": "0x38c2283972c158ceadb3773bf85d4cf63c20b8ddcb8379213231edc9ad7d54a2",
+                "validator_index": 67,
+                "header": {
+                    "slot": 5788402,
+                    "proposer_index": 51,
+                    "parent_root": "0x155f296b0f1125544889bf879fdcef2378af621cce314682da092ecc6adf8ec8",
+                    "state_root": "0x7aac2bab3ed70e35ba9123b739f6375caed3b51c8c947703087b911d54b0cc9f",
+                    "body_root": "0xea41d9a12d46e604dd4c8c52da906a1840635955cd105e5a8fbfa685964c593b"
+                },
+                "validator_data": {
+                    "pubkey": "0xab2f79eeae163596276d5a56e52be4796df33377b157531a839a0174a68ca36e245bee122c4b5364176cf25ec2e0e8fc",
+                    "withdrawal_credentials": "0x0100000000000000000000008c0e122960dc2e97dc0059c07d6901dce72818e1",
+                    "effective_balance": 5930000000000000,
+                    "slashed": False,
+                    "activation_eligibility_epoch": 21945,
+                    "activation_epoch": 21946,
+                    "exit_epoch": 18446744073709551615,
+                    "withdrawable_epoch": 18446744073709551615
+                },
+                "metadata": {
+                    "timestamp": 1748773066,
+                    "next_block_timestamp": 1748773078,
+                    "age_seconds": 5,
+                    "slot": 5788402,
+                    "balance_proof_length": 44,
+                    "validator_proof_length": 45,
+                    "balance": "5934426930679472",
+                    "effective_balance": "5930000000000000"
                 }
             }
         } 

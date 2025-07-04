@@ -15,7 +15,6 @@ from .ssz import (
     BeaconState, 
     Validator,
     ValidatorBalance,
-    load_and_process_state,
     merkle_root_basic,
     get_proof,
     get_fixed_capacity_proof,
@@ -24,6 +23,11 @@ from .ssz import (
     merkle_list_tree,
     VALIDATOR_REGISTRY_LIMIT
 )
+from .ssz.containers.utils import load_and_process_state as _load_state
+
+def load_and_process_state(state_file: str) -> 'BeaconState':
+    """Load and process beacon state from JSON file."""
+    return _load_state(state_file)
 
 from bera_proofs.ssz.merkle import (
     get_fixed_capacity_proof,

@@ -114,15 +114,81 @@ poetry run python -m bera_proofs.cli balance 5 \
 The REST API provides proof generation via HTTP endpoints with automatic beacon chain data fetching.
 
 ### Starting the API Server
-```bash
-# Start with default settings (port 8000)
-poetry run python -m src.cli serve
 
+#### Quick Start (Testnet)
+```bash
+# Start API on testnet (default configuration)
+poetry run python -m bera_proofs.cli serve
+
+# The API will use:
+# - Network: testnet
+# - Beacon RPC: https://testnet.beacon-0.bera.gra.lgns.net
+# - Server: http://0.0.0.0:8000
+```
+
+#### Production Deployment Options
+
+**🧪 Testnet Configuration**
+```bash
+# Method 1: Default testnet (recommended for testing)
+poetry run python -m bera_proofs.cli serve --host 0.0.0.0 --port 8000
+
+# Method 2: Explicit testnet configuration
+BEACON_NETWORK=testnet poetry run python -m bera_proofs.cli serve
+
+# Method 3: Custom testnet endpoint
+BEACON_RPC_URL_TESTNET=https://your-testnet-beacon.com poetry run python -m bera_proofs.cli serve
+```
+
+**🚀 Mainnet Configuration**
+```bash
+# Method 1: Set mainnet in environment
+BEACON_NETWORK=mainnet poetry run python -m bera_proofs.cli serve
+
+# Method 2: Custom mainnet endpoint
+BEACON_NETWORK=mainnet BEACON_RPC_URL_MAINNET=https://your-mainnet-beacon.com poetry run python -m bera_proofs.cli serve
+
+# Method 3: Permanent configuration (edit .env file)
+# Set BEACON_NETWORK=mainnet in .env, then:
+poetry run python -m bera_proofs.cli serve
+```
+
+**🔧 Advanced Options**
+```bash
 # Custom port and host
-poetry run python -m src.cli serve --port 8080 --host 0.0.0.0
+poetry run python -m bera_proofs.cli serve --port 8080 --host 127.0.0.1
 
 # Enable development mode with auto-reload
-poetry run python -m src.cli serve --dev
+poetry run python -m bera_proofs.cli serve --dev
+
+# Background deployment (using tmux/screen)
+tmux new-session -d -s bera-api 'poetry run python -m bera_proofs.cli serve'
+```
+
+#### Starting in tmux Session
+```bash
+# Create or attach to tmux session
+tmux new-session -d -s bera-proofs-api
+
+# Start testnet API
+tmux send-keys -t bera-proofs-api "cd /path/to/bera-proofs" Enter
+tmux send-keys -t bera-proofs-api "poetry run python -m bera_proofs.cli serve" Enter
+
+# Start mainnet API  
+tmux send-keys -t bera-proofs-api "cd /path/to/bera-proofs" Enter
+tmux send-keys -t bera-proofs-api "BEACON_NETWORK=mainnet poetry run python -m bera_proofs.cli serve" Enter
+
+# View session
+tmux attach-session -t bera-proofs-api
+```
+
+#### Verifying Network Configuration
+```bash
+# Check which network the API is using
+curl -s http://localhost:8000/health
+
+# View initialization logs to confirm beacon endpoint
+# Look for: "Initialized BeaconAPIClient with base_url: https://..."
 ```
 
 ### API Configuration
@@ -132,9 +198,28 @@ Configure the API via environment variables. Copy `.env.example` to `.env` and u
 cp .env.example .env
 
 # Edit .env to set your configuration
-# - BEACON_NETWORK: Choose 'testnet' or 'mainnet'
+# Key settings:
+# - BEACON_NETWORK: Choose 'testnet' or 'mainnet'  
 # - BEACON_RPC_URL_TESTNET: Set testnet beacon URL
 # - BEACON_RPC_URL_MAINNET: Set mainnet beacon URL
+# - API_HOST: Server host (default: 0.0.0.0)
+# - API_PORT: Server port (default: 8000)
+```
+
+**Example .env for Testnet:**
+```bash
+BEACON_NETWORK=testnet
+BEACON_RPC_URL_TESTNET=https://testnet.beacon-0.bera.gra.lgns.net
+API_HOST=0.0.0.0
+API_PORT=8000
+```
+
+**Example .env for Mainnet:**
+```bash
+BEACON_NETWORK=mainnet
+BEACON_RPC_URL_MAINNET=https://mainnet.beacon-1.bera.de.lgns.net
+API_HOST=0.0.0.0
+API_PORT=8000
 ```
 
 ### Making API Requests

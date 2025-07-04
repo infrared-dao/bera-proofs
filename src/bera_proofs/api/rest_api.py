@@ -13,17 +13,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 
-from .proof_service import ProofService, ProofServiceError, ProofResult
+from .proof_service import ProofService, ProofServiceError
 from .beacon_client import BeaconAPIClient, BeaconAPIError
 from ..models.api_models import (
-    ProofRequest, 
-    ProofResponse, 
     ErrorResponse, 
     HealthResponse,
-    ValidatorProofRequest,
-    ValidatorProofResponse,
-    BalanceProofRequest, 
-    BalanceProofResponse
+    CombinedProofRequest,
+    CombinedProofResponse
 )
 
 # Configure logging
@@ -34,27 +30,30 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Bera Proofs API",
     description="""
-    Generate Merkle proofs for Berachain beacon state validators and balances.
+    Generate combined Merkle proofs for Berachain validators.
     
-    This API provides endpoints to generate cryptographic proofs that allow verification
-    of specific validator data against the beacon chain state root without requiring
-    the full state data.
+    This simplified API provides a single endpoint to generate both validator existence
+    and balance proofs in one efficient call. The proofs can be verified against the
+    beacon chain state root without requiring the full state data.
     
     ## Features
-    - **Validator Proofs**: Prove a validator exists in the state
-    - **Balance Proofs**: Prove a validator's balance (both precise and effective)
-    - **Live API Integration**: Automatically fetch fresh data from beacon chain
-    - **Auto-fetch Historical**: Automatically retrieves required historical roots
+    - **Combined Proofs**: Both validator and balance proofs in a single API call
+    - **Flexible Identification**: Use either validator index or public key
+    - **Live Data**: Automatically fetches fresh data from beacon chain
+    - **Timestamp Support**: Includes timestamp data for smart contract validation
+    - **Slot Options**: Support for "head", "finalized", "recent", or specific slot numbers
     
-    ## Proof Types
-    All proof endpoints return a list of 32-byte merkle tree sibling hashes
-    that can be used to reconstruct the root hash for verification.
+    ## Validator Identification
+    Validators can be identified by either:
+    - **Index**: Numeric index as string (e.g., "0", "123", "456")
+    - **Public Key**: 48-byte hex string with 0x prefix (e.g., "0x957004...")
     
-    ## Data Sources
-    The API exclusively uses live beacon chain data fetched via the standard
-    Beacon API. For local file operations, use the CLI tool instead.
+    ## Usage
+    Simply call the `/proofs/combined` endpoint with your validator identifier
+    and optional slot specification. The API returns both proofs along with
+    all necessary metadata for verification.
     """,
-    version="1.0.0",
+    version="2.0.0",
     contact={
         "name": "Bera Proofs Team",
         "url": "https://github.com/berachain/bera-proofs"
@@ -165,17 +164,20 @@ async def health_check(service: ProofService = Depends(get_proof_service)):
         )
 
 
-@app.post("/proofs/validator", response_model=ValidatorProofResponse)
-async def generate_validator_proof(
-    request: ValidatorProofRequest,
+# Removed individual validator and balance endpoints - using only combined endpoint
+
+
+@app.post("/proofs/combined", response_model=CombinedProofResponse)
+async def generate_combined_proof(
+    request: CombinedProofRequest,
     service: ProofService = Depends(get_proof_service)
 ):
     """
-    Generate a validator existence proof.
+    Generate both validator and balance proofs in a single call.
     
-    Generates a Merkle proof that proves a specific validator exists in the
-    beacon state at the given slot. The proof can be verified against the
-    state root to confirm the validator's presence.
+    This endpoint generates both a validator existence proof and a balance proof
+    for the specified validator. The response matches the format used by the CLI
+    combine command, providing all necessary data for verification in one response.
     
     The validator can be identified by either:
     - Index: numeric index (e.g., "0", "123")
@@ -183,92 +185,38 @@ async def generate_validator_proof(
     
     All data is automatically fetched from the beacon chain API.
     
-    **Proof Structure:**
-    - Validator proof within the validators list
-    - State proof for the validators field
+    **Response Structure:**
+    - `validator_proof`: Merkle proof for validator existence
+    - `balance_proof`: Merkle proof for validator balance
+    - `state_root`: The beacon state root
+    - Additional metadata including timestamps for smart contract validation
     
     **Use Cases:**
-    - Verify validator registration
-    - Prove validator participation in consensus
-    - Validate validator data for external protocols
+    - Efficient proof generation when both proofs are needed
+    - Smart contract integrations requiring both validator and balance verification
+    - Reduced API calls for complete validator verification
     """
     try:
-        result = service.get_validator_proof(
+        result = service.get_combined_proof(
             identifier=request.identifier,
             prev_state_root=request.prev_state_root,
             prev_block_root=request.prev_block_root,
             slot=request.slot
         )
         
-        return ValidatorProofResponse(
-            proof=result["proof"],
-            root=result["root"],
-            validator_index=result["validator_index"],
-            validator_pubkey=result.get("validator_pubkey"),
-            slot=request.slot,
-            proof_type="validator",
-            metadata=result["metadata"]
-        )
+        return CombinedProofResponse(**result)
     except ProofServiceError:
         raise
     except Exception as e:
-        logger.error(f"Error in validator proof endpoint: {e}")
+        logger.error(f"Error in combined proof endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/proofs/balance", response_model=BalanceProofResponse)
-async def generate_balance_proof(
-    request: BalanceProofRequest,
-    service: ProofService = Depends(get_proof_service)
-):
-    """
-    Generate a validator balance proof.
-    
-    Generates a Merkle proof that proves a validator's balance exists in the
-    beacon state at the given slot. The proof includes both the precise balance
-    and effective balance.
-    
-    The validator can be identified by either:
-    - Index: numeric index (e.g., "0", "123")
-    - Public key: hex string with 0x prefix (e.g., "0x957004...")
-    
-    All data is automatically fetched from the beacon chain API.
-    
-    **Proof Structure:**
-    - Balance proof within the balances list
-    - State proof for the balances field
-    
-    **Use Cases:**
-    - Verify validator balance for external protocols
-    - Prove staking rewards and penalties
-    - Validate financial data for auditing
-    """
-    try:
-        result = service.get_balances_proof(
-            identifier=request.identifier,
-            prev_state_root=request.prev_state_root,
-            prev_block_root=request.prev_block_root,
-            slot=request.slot
-        )
-        
-        return BalanceProofResponse(
-            proof=result["proof"],
-            root=result["root"],
-            validator_index=result["validator_index"],
-            validator_pubkey=result.get("validator_pubkey"),
-            slot=request.slot,
-            proof_type="balance",
-            metadata=result["metadata"]
-        )
-    except ProofServiceError:
-        raise
-    except Exception as e:
-        logger.error(f"Error in balance proof endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# Removed individual GET endpoints - using only combined endpoint
 
 
-@app.get("/proofs/validator/{identifier}")
-async def generate_validator_proof_get(
+@app.get("/proofs/combined/{identifier}")
+async def generate_combined_proof_get(
     identifier: str,
     slot: str = "head",
     prev_state_root: Optional[str] = None,
@@ -276,7 +224,7 @@ async def generate_validator_proof_get(
     service: ProofService = Depends(get_proof_service)
 ):
     """
-    Generate validator proof via GET request (convenience endpoint).
+    Generate combined validator and balance proof via GET request (convenience endpoint).
     
     Same functionality as POST endpoint but accessible via GET for simple integrations.
     
@@ -284,7 +232,7 @@ async def generate_validator_proof_get(
         identifier: Validator index (e.g., "0", "123") or pubkey (e.g., "0x...")
     """
     try:
-        result = service.get_validator_proof(
+        result = service.get_combined_proof(
             identifier=identifier,
             prev_state_root=prev_state_root,
             prev_block_root=prev_block_root,
@@ -294,38 +242,7 @@ async def generate_validator_proof_get(
     except ProofServiceError:
         raise
     except Exception as e:
-        logger.error(f"Error in validator proof GET endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/proofs/balance/{identifier}")
-async def generate_balance_proof_get(
-    identifier: str,
-    slot: str = "head",
-    prev_state_root: Optional[str] = None,
-    prev_block_root: Optional[str] = None,
-    service: ProofService = Depends(get_proof_service)
-):
-    """
-    Generate balance proof via GET request (convenience endpoint).
-    
-    Same functionality as POST endpoint but accessible via GET for simple integrations.
-    
-    Args:
-        identifier: Validator index (e.g., "0", "123") or pubkey (e.g., "0x...")
-    """
-    try:
-        result = service.get_balances_proof(
-            identifier=identifier,
-            prev_state_root=prev_state_root,
-            prev_block_root=prev_block_root,
-            slot=slot
-        )
-        return result
-    except ProofServiceError:
-        raise
-    except Exception as e:
-        logger.error(f"Error in balance proof GET endpoint: {e}")
+        logger.error(f"Error in combined proof GET endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
