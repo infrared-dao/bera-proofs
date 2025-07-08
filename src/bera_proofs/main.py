@@ -52,6 +52,7 @@ class ProofCombinedResult:
     balance_leaf: bytes
     balances_root: bytes
     validator_index: int
+    header_root: bytes
     header: Dict[str, Any]
     validator_data: Dict[str, Any]
     metadata: Dict[str, Any]
@@ -127,6 +128,9 @@ def generate_validator_proof(state_file: str, validator_index: int,
         validator=validator,
         balance=state.balances[validator_index]
     )
+
+    state.header.state_root = state_root
+    header_root = state.header.merkle_root()
     
     metadata = {
         "proof_length": len(full_proof),
@@ -144,6 +148,7 @@ def generate_validator_proof(state_file: str, validator_index: int,
             "exit_epoch": validator.exit_epoch,
             "withdrawable_epoch": validator.withdrawable_epoch
         },
+        "header_root": header_root.hex(),
         "header": {
             "slot": state.latest_block_header.slot,
             "proposer_index": state.latest_block_header.proposer_index,
@@ -239,6 +244,9 @@ def generate_balance_proof(state_file: str, validator_index: int,
         validator=validator,
         balance=balance
     )
+
+    state.header.state_root = state_root
+    header_root = state.header.merkle_root()
     
     metadata = {
         "proof_length": len(full_proof),
@@ -258,6 +266,7 @@ def generate_balance_proof(state_file: str, validator_index: int,
             "exit_epoch": validator.exit_epoch,
             "withdrawable_epoch": validator.withdrawable_epoch
         },
+        "header_root": header_root.hex(),
         "header": {
             "slot": state.latest_block_header.slot,
             "proposer_index": state.latest_block_header.proposer_index,
@@ -357,6 +366,9 @@ def generate_validator_and_balance_proofs(state_file: str, validator_index: int)
         "timestamp": state.latest_execution_payload_header.timestamp,
         "block_number": state.latest_execution_payload_header.block_number
     }
+     
+    # Get header root
+    header_root = state.latest_block_header.merkle_root()
     
     return ProofCombinedResult(
         balance_proof=full_proof_balance,
@@ -365,6 +377,7 @@ def generate_validator_and_balance_proofs(state_file: str, validator_index: int)
         balance_leaf=balance_leaf,
         balances_root=balances_root,
         validator_index=validator_index,
+        header_root=header_root,
         header={
             "slot": state.latest_block_header.slot,
             "proposer_index": state.latest_block_header.proposer_index,

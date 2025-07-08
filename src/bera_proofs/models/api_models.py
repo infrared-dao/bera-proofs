@@ -215,6 +215,7 @@ class CombinedProofResponse(BaseModel):
         balance_leaf: Balance leaf value as hex string
         balances_root: Balances merkle root as hex string
         validator_index: Validator index used
+        header_root: Block header root as hex string
         header: Block header information
         validator_data: Validator data
         metadata: Additional metadata including timestamp
@@ -225,6 +226,7 @@ class CombinedProofResponse(BaseModel):
     balance_leaf: str = Field(..., description="Balance leaf value as hex string")
     balances_root: str = Field(..., description="Balances merkle root as hex string")
     validator_index: int = Field(..., description="Validator index")
+    header_root: str = Field(..., description="Block header root as hex string")
     header: dict = Field(..., description="Block header information")
     validator_data: dict = Field(..., description="Validator data")
     metadata: dict = Field(default_factory=dict, description="Additional proof metadata")
@@ -237,7 +239,7 @@ class CombinedProofResponse(BaseModel):
                 raise ValueError("All proof steps must be hex strings starting with '0x'")
         return v
     
-    @validator('state_root', 'balance_leaf', 'balances_root')
+    @validator('state_root', 'balance_leaf', 'balances_root', 'header_root')
     def validate_hex_format(cls, v):
         """Validate hex string format."""
         if not v.startswith('0x'):
@@ -253,6 +255,7 @@ class CombinedProofResponse(BaseModel):
                 "balance_leaf": "0x00a0724e1809000000e038035059080000a0724e18090000b00e267154151500",
                 "balances_root": "0x38c2283972c158ceadb3773bf85d4cf63c20b8ddcb8379213231edc9ad7d54a2",
                 "validator_index": 67,
+                "header_root": "0x7aac2bab3ed70e35ba9123b739f6375caed3b51c8c947703087b911d54b0cc9f",
                 "header": {
                     "slot": 5788402,
                     "proposer_index": 51,

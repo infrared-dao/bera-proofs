@@ -178,6 +178,7 @@ class ProofService:
                 "balances_root": f"0x{result.balances_root.hex()}",
                 "validator_index": result.validator_index,
                 "header": result.header,
+                "header_root": f"0x{result.header_root.hex()}",
                 "validator_data": result.validator_data,
                 "metadata": metadata
             }
