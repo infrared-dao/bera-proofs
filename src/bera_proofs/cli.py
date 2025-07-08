@@ -22,7 +22,6 @@ from rich.syntax import Syntax
 # Add src to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from bera_proofs.api.proof_service import ProofService, ProofServiceError
 from bera_proofs.api.beacon_client import BeaconAPIClient, BeaconAPIError
 from bera_proofs.api.rest_api import run_server
 from bera_proofs.visualize_merkle import visualize_merkle_proof, demo_visualization
@@ -382,6 +381,7 @@ def combine(validator_index: int, json_file: str = None, historical_state_file: 
                 "balance_leaf": f"0x{result.balance_leaf.hex()}",
                 "balances_root": f"0x{result.balances_root.hex()}",
                 "validator_index": result.validator_index,
+                "header_root": f"0x{result.header_root.hex()}",
                 "header": {**result.header},
                 "validator_data": {**result.validator_data},
                 "metadata": {
@@ -412,6 +412,7 @@ def combine(validator_index: int, json_file: str = None, historical_state_file: 
                 "balance_leaf": f"0x{result.balance_leaf.hex()}",
                 "balances_root": f"0x{result.balances_root.hex()}",
                 "validator_index": result.validator_index,
+                "header_root": f"0x{result.header_root.hex()}",
                 "header": {**result.header},
                 "validator_data": {**result.validator_data},
                 "metadata": {

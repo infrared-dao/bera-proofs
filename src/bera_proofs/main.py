@@ -367,7 +367,8 @@ def generate_validator_and_balance_proofs(state_file: str, validator_index: int)
         "block_number": state.latest_execution_payload_header.block_number
     }
      
-    # Get header root
+    # Set the state root on the header before calculating header root
+    state.latest_block_header.state_root = state_root
     header_root = state.latest_block_header.merkle_root()
     
     return ProofCombinedResult(

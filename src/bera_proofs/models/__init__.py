@@ -9,21 +9,21 @@ It includes Pydantic models for validation and serialization of:
 - Error responses and status models
 
 Usage:
-    from bera_proofs.models import ProofRequest, ProofResponse
+    from bera_proofs.models import CombinedProofRequest, CombinedProofResponse
     
-    request = ProofRequest(val_index=42, slot="head")
+    request = CombinedProofRequest(identifier="42", slot="head")
 """
 
 from .api_models import (
-    ProofRequest,
-    ProofResponse, 
+    CombinedProofRequest,
+    CombinedProofResponse, 
     ErrorResponse,
     HealthResponse
 )
 
 __all__ = [
-    'ProofRequest',
-    'ProofResponse',
+    'CombinedProofRequest',
+    'CombinedProofResponse',
     'ErrorResponse', 
     'HealthResponse'
 ] 

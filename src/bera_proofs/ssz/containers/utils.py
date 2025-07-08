@@ -31,7 +31,7 @@ def normalize_hex(hex_str, expected_bytes=None):
 
 
 def json_to_class(data: Any, cls: type) -> Any:
-    from .beacon import Fork, BeaconBlockHeader, Eth1Data, ExecutionPayloadHeader, Validator, BeaconState
+    from .beacon import Fork, BeaconBlockHeader, Eth1Data, ExecutionPayloadHeader, Validator, BeaconState, PendingPartialWithdrawal
     
     if isinstance(data, dict):
         # Convert keys to snake_case and adjust data types
@@ -80,6 +80,8 @@ def json_to_class(data: Any, cls: type) -> Any:
                     "blob_gas_used",
                     "excess_blob_gas",
                     "next_withdrawal_validator_index",
+                    "validator_index",
+                    "amount",
                 }:
                     processed[new_key] = (
                         int(value, 16) if isinstance(value, str) else value
@@ -99,6 +101,8 @@ def json_to_class(data: Any, cls: type) -> Any:
             return ExecutionPayloadHeader(**processed)
         elif cls == Validator:
             return Validator(**processed)
+        elif cls == PendingPartialWithdrawal:
+            return PendingPartialWithdrawal(**processed)
         if cls == BeaconState:
             # Provide default values for missing fields
             processed["next_withdrawal_index"] = processed.get(
@@ -121,6 +125,9 @@ def json_to_class(data: Any, cls: type) -> Any:
             )
             processed["validators"] = [
                 json_to_class(v, Validator) for v in processed["validators"]
+            ]
+            processed["pending_partial_withdrawals"] = [
+                json_to_class(w, PendingPartialWithdrawal) for w in processed.get("pending_partial_withdrawals", [])
             ]
             processed["block_roots"] = [
                 bytes.fromhex(br[2:]) for br in processed["block_roots"]

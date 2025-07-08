@@ -5,14 +5,44 @@ This module defines Pydantic models for API request and response validation.
 These models ensure proper data structure and type validation for the proof API.
 """
 
-from typing import List, Optional, Union
+from typing import List, Optional
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
 
 
-class ProofRequest(BaseModel):
+class ErrorResponse(BaseModel):
     """
-    Request model for proof generation endpoints.
+    Response model for API errors.
+    
+    Attributes:
+        error: Error message
+        code: Error code (string identifier)
+        details: Additional error details
+    """
+    error: str = Field(..., description="Error message")
+    code: str = Field(..., description="Error code")
+    details: Optional[dict] = Field(default=None, description="Additional error details")
+
+
+class HealthResponse(BaseModel):
+    """
+    Response model for health check endpoint.
+    
+    Attributes:
+        status: Service status
+        beacon_api: Beacon API connectivity status
+        version: Service version
+        timestamp: Response timestamp
+    """
+    status: str = Field(..., description="Service status")
+    beacon_api: bool = Field(..., description="Beacon API connectivity")
+    version: str = Field(default="0.1.0", description="Service version")
+    timestamp: Optional[str] = Field(default_factory=lambda: datetime.utcnow().isoformat(), description="Response timestamp")
+
+
+class CombinedProofRequest(BaseModel):
+    """
+    Request model for combined validator and balance proof generation.
     
     Attributes:
         identifier: Validator identifier - either index (e.g., "0", "123") or pubkey (e.g., "0x...")
@@ -64,149 +94,10 @@ class ProofRequest(BaseModel):
         return v
 
 
-class ProofResponse(BaseModel):
-    """
-    Response model for successful proof generation.
-    
-    Attributes:
-        proof: List of proof steps as hex strings
-        root: Merkle root as hex string
-        validator_index: Validator index used
-        validator_pubkey: Validator public key (optional)
-        slot: Slot used for proof generation
-        proof_type: Type of proof generated
-        metadata: Additional metadata about the proof
-    """
-    proof: List[str] = Field(..., description="List of proof steps as hex strings")
-    root: str = Field(..., description="Merkle root as hex string")
-    validator_index: int = Field(..., description="Validator index used")
-    validator_pubkey: Optional[str] = Field(None, description="Validator public key")
-    slot: str = Field(..., description="Slot used for proof generation")
-    proof_type: str = Field(..., description="Type of proof (validator/balance/proposer)")
-    metadata: dict = Field(default_factory=dict, description="Additional proof metadata")
-    
-    @validator('proof')
-    def validate_proof_format(cls, v):
-        """Validate proof steps are proper hex strings."""
-        for step in v:
-            if not isinstance(step, str) or not step.startswith('0x'):
-                raise ValueError("All proof steps must be hex strings starting with '0x'")
-        return v
-    
-    @validator('root')
-    def validate_root_format(cls, v):
-        """Validate root is proper hex string."""
-        if not v.startswith('0x') or len(v) != 66:  # 0x + 64 hex chars = 66
-            raise ValueError("Root must be a 32-byte hex string")
-        return v
-
-
-class ErrorResponse(BaseModel):
-    """
-    Response model for API errors.
-    
-    Attributes:
-        error: Error message
-        code: Error code (string identifier)
-        details: Additional error details
-    """
-    error: str = Field(..., description="Error message")
-    code: str = Field(..., description="Error code")
-    details: Optional[dict] = Field(default=None, description="Additional error details")
-
-
-class HealthResponse(BaseModel):
-    """
-    Response model for health check endpoint.
-    
-    Attributes:
-        status: Service status
-        beacon_api: Beacon API connectivity status
-        version: Service version
-        timestamp: Response timestamp
-    """
-    status: str = Field(..., description="Service status")
-    beacon_api: bool = Field(..., description="Beacon API connectivity")
-    version: str = Field(default="0.1.0", description="Service version")
-    timestamp: Optional[str] = Field(default_factory=lambda: datetime.utcnow().isoformat(), description="Response timestamp")
-
-
-class ValidatorProofRequest(ProofRequest):
-    """Request model specifically for validator proof generation."""
-    # For backward compatibility
-    val_index: Optional[int] = Field(None, description="Deprecated: Use 'identifier' instead")
-    
-    @validator('identifier', pre=True, always=True)
-    def handle_backward_compatibility(cls, v, values):
-        """Handle backward compatibility with val_index."""
-        if v is None and 'val_index' in values and values['val_index'] is not None:
-            return str(values['val_index'])
-        return v
-
-
-class BalanceProofRequest(ProofRequest):
-    """Request model specifically for balance proof generation."""
-    # For backward compatibility
-    val_index: Optional[int] = Field(None, description="Deprecated: Use 'identifier' instead")
-    
-    @validator('identifier', pre=True, always=True)
-    def handle_backward_compatibility(cls, v, values):
-        """Handle backward compatibility with val_index."""
-        if v is None and 'val_index' in values and values['val_index'] is not None:
-            return str(values['val_index'])
-        return v
-
-
-class ValidatorProofResponse(ProofResponse):
-    """Response model specifically for validator proofs."""
-    proof_type: str = Field(default="validator", description="Proof type")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "proof": ["0x1234...", "0x5678..."],
-                "root": "0xabcd...",
-                "validator_index": 42,
-                "validator_pubkey": "0x957004733f0c4d7e51b4f1ac3f1c08247f9c5455d302b669c723eb80d8c286515b5623757a9053a5a7b8c17ee3feed4b",
-                "slot": "head",
-                "proof_type": "validator",
-                "metadata": {
-                    "proof_length": 45,
-                    "validator_count": 100
-                }
-            }
-        }
-
-
-class BalanceProofResponse(ProofResponse):
-    """Response model specifically for balance proofs."""
-    proof_type: str = Field(default="balance", description="Proof type")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "proof": ["0x1234...", "0x5678..."],
-                "root": "0xabcd...",
-                "validator_index": 42,
-                "validator_pubkey": "0x957004733f0c4d7e51b4f1ac3f1c08247f9c5455d302b669c723eb80d8c286515b5623757a9053a5a7b8c17ee3feed4b",
-                "slot": "head", 
-                "proof_type": "balance",
-                "metadata": {
-                    "proof_length": 45,
-                    "balance": "32000000000"
-                }
-            }
-        }
-
-
-class CombinedProofRequest(ProofRequest):
-    """Request model for combined validator and balance proof generation."""
-    pass
-
-
 class CombinedProofResponse(BaseModel):
     """
     Response model for combined validator and balance proofs.
+    Matches the ProofCombinedResult from main.py for consistency.
     
     Attributes:
         balance_proof: List of balance proof steps as hex strings

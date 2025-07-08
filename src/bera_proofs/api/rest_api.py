@@ -13,8 +13,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 
-from .proof_service import ProofService, ProofServiceError
+import json
+import tempfile
+import os
+import time
 from .beacon_client import BeaconAPIClient, BeaconAPIError
+from ..main import ProofCombinedResult, generate_validator_and_balance_proofs
 from ..models.api_models import (
     ErrorResponse, 
     HealthResponse,
@@ -73,28 +77,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global proof service instance
-proof_service = None
+# Global beacon client instance
+beacon_client = None
 
 
-def get_proof_service() -> ProofService:
-    """Dependency to get the proof service instance."""
-    global proof_service
-    if proof_service is None:
-        proof_service = ProofService()
-    return proof_service
+def get_beacon_client() -> BeaconAPIClient:
+    """Dependency to get the beacon client instance."""
+    global beacon_client
+    if beacon_client is None:
+        beacon_client = BeaconAPIClient()
+    return beacon_client
 
 
-@app.exception_handler(ProofServiceError)
-async def proof_service_exception_handler(request, exc: ProofServiceError):
-    """Handle proof service errors."""
-    logger.error(f"Proof service error: {exc}")
+@app.exception_handler(ValueError)
+async def value_error_handler(request, exc: ValueError):
+    """Handle validation errors."""
+    logger.error(f"Validation error: {exc}")
     return JSONResponse(
         status_code=400,
         content=ErrorResponse(
             error=str(exc),
-            code="PROOF_GENERATION_ERROR",
-            details={"error_type": "ProofServiceError"}
+            code="VALIDATION_ERROR",
+            details={"error_type": "ValueError"}
         ).model_dump()
     )
 
@@ -140,7 +144,7 @@ async def root():
 
 
 @app.get("/health", response_model=HealthResponse)
-async def health_check(service: ProofService = Depends(get_proof_service)):
+async def health_check(client: BeaconAPIClient = Depends(get_beacon_client)):
     """
     Health check endpoint.
     
@@ -148,7 +152,7 @@ async def health_check(service: ProofService = Depends(get_proof_service)):
     """
     try:
         # Check beacon API connectivity
-        beacon_status = service.beacon_client.health_check()
+        beacon_status = client.health_check()
         
         return HealthResponse(
             status="healthy",
@@ -164,13 +168,10 @@ async def health_check(service: ProofService = Depends(get_proof_service)):
         )
 
 
-# Removed individual validator and balance endpoints - using only combined endpoint
-
-
 @app.post("/proofs/combined", response_model=CombinedProofResponse)
 async def generate_combined_proof(
     request: CombinedProofRequest,
-    service: ProofService = Depends(get_proof_service)
+    client: BeaconAPIClient = Depends(get_beacon_client)
 ):
     """
     Generate both validator and balance proofs in a single call.
@@ -197,22 +198,77 @@ async def generate_combined_proof(
     - Reduced API calls for complete validator verification
     """
     try:
-        result = service.get_combined_proof(
-            identifier=request.identifier,
-            prev_state_root=request.prev_state_root,
-            prev_block_root=request.prev_block_root,
-            slot=request.slot
-        )
+        # Resolve validator identifier
+        state_response = client.get_beacon_state(request.slot)
+        if 'data' in state_response:
+            state_data = state_response['data']
+        else:
+            state_data = state_response
+            
+        validators = state_data.get('validators', [])
         
-        return CombinedProofResponse(**result)
-    except ProofServiceError:
+        # Ensure pending_partial_withdrawals is present as empty list if missing
+        if 'pending_partial_withdrawals' not in state_data:
+            state_data['pending_partial_withdrawals'] = []
+        
+        # Resolve identifier to index
+        if request.identifier.startswith('0x') and len(request.identifier) == 98:
+            # Search for validator by pubkey
+            pubkey_lower = request.identifier.lower()
+            validator_index = None
+            for idx, validator in enumerate(validators):
+                if validator.get('pubkey', '').lower() == pubkey_lower:
+                    validator_index = idx
+                    break
+            if validator_index is None:
+                raise ValueError(f"Validator with pubkey {request.identifier} not found")
+        else:
+            # Parse as integer index
+            validator_index = int(request.identifier)
+            if validator_index < 0 or validator_index >= len(validators):
+                raise ValueError(f"Validator index {validator_index} out of range (0-{len(validators)-1})")
+        
+        # Save state to temporary file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump({"data": state_data}, f)
+            temp_file = f.name
+        
+        try:
+            # Generate combined proof using main.py
+            logger.info(f"Generating proof for validator {validator_index} using temp file {temp_file}")
+            result: ProofCombinedResult = generate_validator_and_balance_proofs(temp_file, validator_index)
+            
+            # Add timestamp information to metadata
+            if 'timestamp' in result.metadata:
+                result.metadata['age_seconds'] = int(time.time() - result.metadata['timestamp'])
+            
+            # Add actual slot number to metadata
+            result.metadata['slot'] = result.header.get('slot', state_data.get('slot'))
+            
+            # Convert ProofCombinedResult to response format
+            return CombinedProofResponse(
+                balance_proof=[f"0x{step.hex()}" for step in result.balance_proof],
+                validator_proof=[f"0x{step.hex()}" for step in result.validator_proof],
+                state_root=result.header['state_root'],  # Already has 0x prefix
+                balance_leaf=f"0x{result.balance_leaf.hex()}",
+                balances_root=f"0x{result.balances_root.hex()}",
+                validator_index=result.validator_index,
+                header=result.header,
+                header_root=f"0x{result.header_root.hex()}",
+                validator_data=result.validator_data,
+                metadata=result.metadata
+            )
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+            
+    except ValueError:
+        raise
+    except BeaconAPIError:
         raise
     except Exception as e:
         logger.error(f"Error in combined proof endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-# Removed individual GET endpoints - using only combined endpoint
 
 
 @app.get("/proofs/combined/{identifier}")
@@ -221,7 +277,7 @@ async def generate_combined_proof_get(
     slot: str = "head",
     prev_state_root: Optional[str] = None,
     prev_block_root: Optional[str] = None,
-    service: ProofService = Depends(get_proof_service)
+    client: BeaconAPIClient = Depends(get_beacon_client)
 ):
     """
     Generate combined validator and balance proof via GET request (convenience endpoint).
@@ -231,19 +287,18 @@ async def generate_combined_proof_get(
     Args:
         identifier: Validator index (e.g., "0", "123") or pubkey (e.g., "0x...")
     """
-    try:
-        result = service.get_combined_proof(
-            identifier=identifier,
-            prev_state_root=prev_state_root,
-            prev_block_root=prev_block_root,
-            slot=slot
-        )
-        return result
-    except ProofServiceError:
-        raise
-    except Exception as e:
-        logger.error(f"Error in combined proof GET endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    # Create request object and use the POST endpoint logic
+    request = CombinedProofRequest(
+        identifier=identifier,
+        slot=slot,
+        prev_state_root=prev_state_root,
+        prev_block_root=prev_block_root
+    )
+    
+    result = await generate_combined_proof(request, client)
+    
+    # Convert response to dict for GET endpoint
+    return result.model_dump()
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8000, dev: bool = False):
