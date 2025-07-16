@@ -14,14 +14,18 @@ git clone <repository-url>
 cd bera-proofs
 poetry install
 
-# Generate proofs with CLI
+# Option 1: Generate proofs with CLI
 poetry run python -m src.cli validator 5 \
   --json-file test/data/state.json \
   --historical-state-file test/data/state-8.json
 
-poetry run python -m src.cli balance 5 \
-  --json-file test/data/state.json \
-  --historical-state-file test/data/state-8.json
+# Option 2: Start the API server
+poetry run python -m src.cli serve
+
+# Option 3: Use the API
+curl -X POST http://localhost:8000/proofs/validator \
+  -H "Content-Type: application/json" \
+  -d '{"identifier": "5", "slot": "head"}'
 ```
 
 **Response Example:**
@@ -50,12 +54,16 @@ poetry run python -m src.cli balance 5 \
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌──────────────┐
-│     CLI     │────▶│ Proof Gen   │────▶│ SSZ Library  │
-└─────────────┘     └─────────────┘     └──────────────┘
-        │                    │                     │
-        ▼                    ▼                     ▼
+│   REST API  │────▶│ Proof       │────▶│ SSZ Library  │
+└─────────────┘     │ Service     │     └──────────────┘
+                    └─────────────┘              │
+┌─────────────┐            │                     ▼
+│     CLI     │────────────┘            ┌──────────────┐
+└─────────────┘                         │ Merkle Trees │
+        │                               └──────────────┘
+        ▼                                        
 ┌─────────────┐     ┌─────────────┐     ┌──────────────┐
-│ JSON Files  │     │ Test Data   │     │ Merkle Trees │
+│ JSON Files  │     │ Beacon API  │     │  Test Data   │
 └─────────────┘     └─────────────┘     └──────────────┘
 ```
 
@@ -74,17 +82,17 @@ The CLI works with local JSON files and provides reliable, offline proof generat
 ### Basic Commands
 ```bash
 # Get help
-poetry run python -m src.cli --help
-poetry run python -m src.cli validator --help
-poetry run python -m src.cli balance --help
+poetry run python -m bera_proofs.cli --help
+poetry run python -m bera_proofs.cli validator --help
+poetry run python -m bera_proofs.cli balance --help
 
 # Generate validator proof
-poetry run python -m src.cli validator 5 \
+poetry run python -m bera_proofs.cli validator 5 \
   --json-file current_state.json \
   --historical-state-file historical_state.json
 
 # Generate balance proof  
-poetry run python -m src.cli balance 5 \
+poetry run python -m bera_proofs.cli balance 5 \
   --json-file current_state.json \
   --historical-state-file historical_state.json
 ```
@@ -92,14 +100,168 @@ poetry run python -m src.cli balance 5 \
 ### Using Test Data
 ```bash
 # Quick test with included test data
-poetry run python -m src.cli validator 5 \
+poetry run python -m bera_proofs.cli validator 5 \
   --json-file test/data/state.json \
   --historical-state-file test/data/state-8.json
 
-poetry run python -m src.cli balance 5 \
+poetry run python -m bera_proofs.cli balance 5 \
   --json-file test/data/state.json \
   --historical-state-file test/data/state-8.json
 ```
+
+## 🌐 REST API Usage
+
+The REST API provides proof generation via HTTP endpoints with automatic beacon chain data fetching.
+
+### Starting the API Server
+
+#### Quick Start (Testnet)
+```bash
+# Start API on testnet (default configuration)
+poetry run python -m bera_proofs.cli serve
+
+# The API will use:
+# - Network: testnet
+# - Beacon RPC: https://testnet.beacon-0.bera.gra.lgns.net
+# - Server: http://0.0.0.0:8000
+```
+
+#### Production Deployment Options
+
+**🧪 Testnet Configuration**
+```bash
+# Method 1: Default testnet (recommended for testing)
+poetry run python -m bera_proofs.cli serve --host 0.0.0.0 --port 8000
+
+# Method 2: Explicit testnet configuration
+BEACON_NETWORK=testnet poetry run python -m bera_proofs.cli serve
+
+# Method 3: Custom testnet endpoint
+BEACON_RPC_URL_TESTNET=https://your-testnet-beacon.com poetry run python -m bera_proofs.cli serve
+```
+
+**🚀 Mainnet Configuration**
+```bash
+# Method 1: Set mainnet in environment
+BEACON_NETWORK=mainnet poetry run python -m bera_proofs.cli serve
+
+# Method 2: Custom mainnet endpoint
+BEACON_NETWORK=mainnet BEACON_RPC_URL_MAINNET=https://your-mainnet-beacon.com poetry run python -m bera_proofs.cli serve
+
+# Method 3: Permanent configuration (edit .env file)
+# Set BEACON_NETWORK=mainnet in .env, then:
+poetry run python -m bera_proofs.cli serve
+```
+
+**🔧 Advanced Options**
+```bash
+# Custom port and host
+poetry run python -m bera_proofs.cli serve --port 8080 --host 127.0.0.1
+
+# Enable development mode with auto-reload
+poetry run python -m bera_proofs.cli serve --dev
+
+# Background deployment (using tmux/screen)
+tmux new-session -d -s bera-api 'poetry run python -m bera_proofs.cli serve'
+```
+
+#### Starting in tmux Session
+```bash
+# Create or attach to tmux session
+tmux new-session -d -s bera-proofs-api
+
+# Start testnet API
+tmux send-keys -t bera-proofs-api "cd /path/to/bera-proofs" Enter
+tmux send-keys -t bera-proofs-api "poetry run python -m bera_proofs.cli serve" Enter
+
+# Start mainnet API  
+tmux send-keys -t bera-proofs-api "cd /path/to/bera-proofs" Enter
+tmux send-keys -t bera-proofs-api "BEACON_NETWORK=mainnet poetry run python -m bera_proofs.cli serve" Enter
+
+# View session
+tmux attach-session -t bera-proofs-api
+```
+
+#### Verifying Network Configuration
+```bash
+# Check which network the API is using
+curl -s http://localhost:8000/health
+
+# View initialization logs to confirm beacon endpoint
+# Look for: "Initialized BeaconAPIClient with base_url: https://..."
+```
+
+### API Configuration
+Configure the API via environment variables. Copy `.env.example` to `.env` and update:
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env to set your configuration
+# Key settings:
+# - BEACON_NETWORK: Choose 'testnet' or 'mainnet'  
+# - BEACON_RPC_URL_TESTNET: Set testnet beacon URL
+# - BEACON_RPC_URL_MAINNET: Set mainnet beacon URL
+# - API_HOST: Server host (default: 0.0.0.0)
+# - API_PORT: Server port (default: 8000)
+```
+
+**Example .env for Testnet:**
+```bash
+BEACON_NETWORK=testnet
+BEACON_RPC_URL_TESTNET=https://testnet.beacon-0.bera.gra.lgns.net
+API_HOST=0.0.0.0
+API_PORT=8000
+```
+
+**Example .env for Mainnet:**
+```bash
+BEACON_NETWORK=mainnet
+BEACON_RPC_URL_MAINNET=https://mainnet.beacon-1.bera.de.lgns.net
+API_HOST=0.0.0.0
+API_PORT=8000
+```
+
+### Making API Requests
+
+#### Validator Proof
+```bash
+# Using validator index
+curl -X POST http://localhost:8000/proofs/validator \
+  -H "Content-Type: application/json" \
+  -d '{"identifier": "5", "slot": "head"}'
+
+# Using validator pubkey
+curl -X POST http://localhost:8000/proofs/validator \
+  -H "Content-Type: application/json" \
+  -d '{"identifier": "0x957004733f0c4d7e51b4f1ac3f1c08247f9c5455d302b669c723eb80d8c286515b5623757a9053a5a7b8c17ee3feed4b"}'
+```
+
+#### Balance Proof
+```bash
+# GET request (convenient for simple integrations)
+curl http://localhost:8000/proofs/balance/5?slot=head
+
+# POST request with full options
+curl -X POST http://localhost:8000/proofs/balance \
+  -H "Content-Type: application/json" \
+  -d '{
+    "identifier": "5",
+    "slot": "head",
+    "prev_state_root": "0x01ef6767...",
+    "prev_block_root": "0x28925c02..."
+  }'
+```
+
+### API Features
+- **🔍 Validator Identification**: Support for both index and pubkey
+- **🔄 Auto-fetch**: Automatically retrieves beacon chain data
+- **📝 OpenAPI Docs**: Interactive documentation at `/docs`
+- **🌍 CORS Enabled**: Ready for cross-origin requests
+- **📊 Health Checks**: Monitor API and beacon node status
+
+### API Documentation
+Visit `http://localhost:8000/docs` for interactive OpenAPI documentation.
 
 ## 🕰️ Historical Data Requirements
 
@@ -108,7 +270,7 @@ Berachain requires historical state data from 8 slots ago for proof generation. 
 ### 📁 Historical State Files (Recommended)
 Use two state files - current and historical:
 ```bash
-poetry run python -m src.cli validator 0 \
+poetry run python -m bera_proofs.cli validator 0 \
   --json-file current_state.json \
   --historical-state-file historical_state.json
 ```
@@ -116,7 +278,7 @@ poetry run python -m src.cli validator 0 \
 ### ⚙️ Manual Historical Roots
 Provide specific historical roots if you don't have historical state files:
 ```bash
-poetry run python -m src.cli validator 0 \
+poetry run python -m bera_proofs.cli validator 0 \
   --json-file current_state.json \
   --prev-state-root 0x01ef6767e8908883d1e84e91095bbb3f7d98e33773d13b6cc949355909365ff8 \
   --prev-block-root 0x28925c02852c6462577e73cc0fdb0f49bbf910b559c8c0d1b8f69cac38fa3f74
@@ -126,7 +288,7 @@ poetry run python -m src.cli validator 0 \
 When using test data, the CLI automatically uses appropriate test defaults:
 ```bash
 # CLI uses test defaults automatically
-poetry run python -m src.cli validator 0 --json-file test/data/state.json
+poetry run python -m bera_proofs.cli validator 0 --json-file test/data/state.json
 ```
 
 ## 🧪 Testing
@@ -187,11 +349,18 @@ bera-proofs/
 │   ├── main.py                 # Core proof generation
 │   ├── cli.py                  # Command-line interface
 │   ├── visualize_merkle.py     # Visualization tools
+│   ├── api/                    # REST API implementation
+│   │   ├── rest_api.py        # FastAPI endpoints
+│   │   ├── proof_service.py   # Proof generation service
+│   │   └── beacon_client.py   # Beacon chain integration
+│   ├── models/                 # Data models
+│   │   └── api_models.py      # Request/response models
 │   └── ssz/                    # Modular SSZ library
 ├── test/data/                  # Test state files
 │   ├── state.json             # Current state example
 │   └── state-8.json           # Historical state example
 ├── tests/                      # Test suite
+├── @ai_docs/                   # API documentation
 └── README.md
 ```
 
@@ -201,7 +370,8 @@ bera-proofs/
 - ✅ **Proof Generation**: Working with Berachain SSZ
 - ✅ **Test Suite**: Comprehensive coverage
 - ✅ **Visualization**: Interactive proof exploration
-- 🚧 **API**: Under development
+- ✅ **REST API**: Production-ready with validator identification by index or pubkey
+- ✅ **Beacon Integration**: Supports both testnet and mainnet
 
 ## 📄 License
 

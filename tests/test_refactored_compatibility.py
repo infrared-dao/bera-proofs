@@ -38,7 +38,7 @@ from ssz import (
 )
 
 # Import the refactored main function
-from src.main import generate_validator_proof
+from bera_proofs.main import generate_validator_proof
 
 
 class TestRefactoredSSZCompatibility(unittest.TestCase):

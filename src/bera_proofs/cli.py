@@ -22,12 +22,11 @@ from rich.syntax import Syntax
 # Add src to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.api.proof_service import ProofService, ProofServiceError
-from src.api.beacon_client import BeaconAPIClient, BeaconAPIError
-from src.api.rest_api import run_server
-from src.visualize_merkle import visualize_merkle_proof, demo_visualization
-from src.ssz.containers.utils import load_and_process_state
-from src.main import generate_validator_proof, generate_balance_proof
+from bera_proofs.api.beacon_client import BeaconAPIClient, BeaconAPIError
+from bera_proofs.api.rest_api import run_server
+from bera_proofs.visualize_merkle import visualize_merkle_proof, demo_visualization
+from bera_proofs.ssz.containers.utils import load_and_process_state
+from bera_proofs.main import generate_validator_proof, generate_balance_proof, generate_validator_and_balance_proofs
 
 # Configure rich console
 console = Console()
@@ -158,14 +157,14 @@ def validator(validator_index: int, json_file: str = None, historical_state_file
             console.print(f"[green]Extracted block_root: {prev_block_root}[/green]")
         
         if json_file:
-            # For file-based operations, historical data is mandatory for correct state root computation
-            if not historical_state_file and (not prev_state_root or not prev_block_root):
-                raise click.ClickException(
-                    "Historical data is required when using --json-file. Please provide either:\n"
-                    "  1. --historical-state-file path/to/historical_state.json\n"
-                    "  2. Both --prev-state-root 0x123... and --prev-block-root 0x456...\n\n"
-                    "Historical data from 8 slots ago is required to generate the correct state root."
-                )
+            # # For file-based operations, historical data is mandatory for correct state root computation
+            # if not historical_state_file and (not prev_state_root or not prev_block_root):
+            #     raise click.ClickException(
+            #         "Historical data is required when using --json-file. Please provide either:\n"
+            #         "  1. --historical-state-file path/to/historical_state.json\n"
+            #         "  2. Both --prev-state-root 0x123... and --prev-block-root 0x456...\n\n"
+            #         "Historical data from 8 slots ago is required to generate the correct state root."
+            #     )
             
             # Use local JSON file directly
             result = generate_validator_proof(json_file, validator_index, prev_state_root, prev_block_root)
@@ -271,14 +270,14 @@ def balance(validator_index: int, json_file: str = None, historical_state_file: 
             console.print(f"[green]Extracted block_root: {prev_block_root}[/green]")
         
         if json_file:
-            # For file-based operations, historical data is mandatory for correct state root computation
-            if not historical_state_file and (not prev_state_root or not prev_block_root):
-                raise click.ClickException(
-                    "Historical data is required when using --json-file. Please provide either:\n"
-                    "  1. --historical-state-file path/to/historical_state.json\n"
-                    "  2. Both --prev-state-root 0x123... and --prev-block-root 0x456...\n\n"
-                    "Historical data from 8 slots ago is required to generate the correct state root."
-                )
+            # # For file-based operations, historical data is mandatory for correct state root computation
+            # if not historical_state_file and (not prev_state_root or not prev_block_root):
+            #     raise click.ClickException(
+            #         "Historical data is required when using --json-file. Please provide either:\n"
+            #         "  1. --historical-state-file path/to/historical_state.json\n"
+            #         "  2. Both --prev-state-root 0x123... and --prev-block-root 0x456...\n\n"
+            #         "Historical data from 8 slots ago is required to generate the correct state root."
+            #     )
             
             # Use local JSON file directly
             result = generate_balance_proof(json_file, validator_index, prev_state_root, prev_block_root)
@@ -347,6 +346,93 @@ def balance(validator_index: int, json_file: str = None, historical_state_file: 
 
 
 @cli.command()
+@click.argument('validator_index', type=int)
+@click.option('--json-file', type=str, help='Path to current beacon state JSON file')
+@click.option('--slot', type=int, help='Slot number for API queries (defaults to head)')
+@click.option('--auto-fetch', is_flag=True, default=True, help='Auto-fetch historical data from API if not provided via other options')
+def combine(validator_index: int, json_file: str = None, historical_state_file: str = None, slot: int = None,
+            prev_state_root: str = None, prev_block_root: str = None, auto_fetch: bool = True) -> Dict[str, Any]:
+    """
+    Generate a validator and balance proof.
+    
+    VALIDATOR_INDEX: Index of the validator balance to prove
+    
+    Historical Data Options (choose one):
+    
+    1. --historical-state-file: Provide a state file from 8 slots ago
+       Example: --historical-state-file historical_state.json
+    
+    2. --prev-state-root and --prev-block-root: Provide explicit hex values
+       Example: --prev-state-root 0x123... --prev-block-root 0x456...
+    
+    3. --auto-fetch: Let the tool fetch historical data from the beacon API
+       (Default behavior when using API mode)
+    """
+    try: 
+        if json_file:           
+            # Use local JSON file directly
+            result = generate_validator_and_balance_proofs(json_file, validator_index)
+            
+            # Format for JSON output
+            output = {
+                "balance_proof": [f"0x{step.hex()}" for step in result.balance_proof],
+                "validator_proof": [f"0x{step.hex()}" for step in result.validator_proof],
+                "state_root": f"0x{result.state_root.hex()}",
+                "balance_leaf": f"0x{result.balance_leaf.hex()}",
+                "balances_root": f"0x{result.balances_root.hex()}",
+                "validator_index": result.validator_index,
+                "header_root": f"0x{result.header_root.hex()}",
+                "header": {**result.header},
+                "validator_data": {**result.validator_data},
+                "metadata": {
+                    **result.metadata
+                }
+            }
+
+        else:
+            # Use API with optional auto-fetching
+            beacon_client = BeaconAPIClient()
+            slot_id = slot if slot is not None else "head"
+            
+            # Get state data and save to temp file
+            state_response = beacon_client.get_state(slot_id)
+            
+            temp_file = "temp_state.json"
+            with open(temp_file, "w") as f:
+                json.dump(state_response, f)
+            
+            try:
+                result = generate_validator_and_balance_proofs(temp_file, validator_index)
+                
+                # Format for JSON output
+                output = {
+                "balance_proof": [f"0x{step.hex()}" for step in result.balance_proof],
+                "validator_proof": [f"0x{step.hex()}" for step in result.validator_proof],
+                "state_root": f"0x{result.state_root.hex()}",
+                "balance_leaf": f"0x{result.balance_leaf.hex()}",
+                "balances_root": f"0x{result.balances_root.hex()}",
+                "validator_index": result.validator_index,
+                "header_root": f"0x{result.header_root.hex()}",
+                "header": {**result.header},
+                "validator_data": {**result.validator_data},
+                "metadata": {
+                    **result.metadata
+                }
+            }
+            finally:
+                # Clean up temp file
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
+        
+        print(format_proof_result(output))
+        return output
+        
+    except Exception as e:
+        logger.error(f"Error generating balance proof: {e}")
+        raise click.ClickException(str(e))
+
+
+@cli.command()
 @click.option('--host', default='127.0.0.1', help='Host to bind to')
 @click.option('--port', default=8000, type=int, help='Port to bind to')
 @click.option('--dev', is_flag=True, help='Enable development mode with auto-reload')
@@ -388,7 +474,7 @@ def visualize(ctx, json_file: Optional[str], validator_index: Optional[int]):
             demo_visualization()
         else:
             console.print("[cyan]Showing Merkle tree structure...[/cyan]")
-            from src.visualize_merkle import create_simple_tree_diagram
+            from bera_proofs.visualize_merkle import create_simple_tree_diagram
             create_simple_tree_diagram()
             
     except Exception as e:
