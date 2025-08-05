@@ -27,6 +27,7 @@ container=$(docker run -d \
   -e BEACON_RPC_URL_MAINNET=https://mainnet.beacon-1.bera.de.lgns.net \
   -e API_HOST=0.0.0.0 \
   -e API_PORT=8000 \
+  -e BERA_PROOFS_LOG=/app/logs/bera-proofs.log \
   --name bera-proofs_service \
   471112650735.dkr.ecr.eu-central-1.amazonaws.com/backend/bera-proofs:"${image_tag}"
 )
