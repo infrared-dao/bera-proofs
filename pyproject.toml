@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Berachain Merkle Proof Generator with Beacon API Integration"
 authors = ["0xFrontRunner <nofront@infrared.finance>"]
 readme = "README.md"
-packages = [{include = "bera_proofs", from = "src"}]
+
+[[tool.poetry.packages]]
+include = "bera_proofs"
+from    = "src"
 
 [tool.poetry.dependencies]
 python = "^3.12"

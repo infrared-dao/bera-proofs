@@ -37,7 +37,7 @@ RUN poetry install --no-ansi --no-interaction --no-root \
 # ------------------------------------------------------------------------------
 # 4. Copy project source code and install it (fast, local only)
 # ------------------------------------------------------------------------------
-COPY src ./src
+COPY src ./
 
 # Install console-script entry points *without* hitting the network again
 RUN poetry install --no-ansi --no-interaction --only-root
