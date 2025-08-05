@@ -28,9 +28,7 @@ container=$(docker run -d \
   -e API_HOST=0.0.0.0 \
   -e API_PORT=8000 \
   --name bera-proofs_service \
-  471112650735.dkr.ecr.eu-central-1.amazonaws.com/backend/bera-proofs:"${image_tag}" \
-  bera-proofs \
-  --log_file=/app/logs/bera-proofs.log
+  471112650735.dkr.ecr.eu-central-1.amazonaws.com/backend/bera-proofs:"${image_tag}"
 )
 
 echo "Started container: ${container}"
