@@ -5,9 +5,12 @@ This module contains the core functions for generating Merkle proofs from Beacon
 by both CLI and API interfaces. Supports validator and balance proofs.
 """
 
+
 import json
 import logging
 import math
+import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
@@ -35,6 +38,36 @@ from bera_proofs.ssz.merkle import (
 )
 
 logger = logging.getLogger(__name__)
+
+# --------------------------------------------------------------------------- #
+# Logging helper
+# --------------------------------------------------------------------------- #
+
+def configure_logging(log_file: Optional[str] = None,
+                      level: int = logging.INFO) -> None:
+    """
+    Initialise application-wide logging.
+    """
+    if log_file is None:
+        log_file = os.getenv("BERA_PROOFS_LOG")
+
+    if logging.getLogger().handlers:
+        return
+
+    handlers: List[logging.Handler] = [logging.StreamHandler()]
+
+    if log_file:
+        Path(log_file).expanduser().parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
+
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+
+configure_logging()  # honours env-var BERA_PROOFS_LOG
 
 @dataclass
 class ProofResult:
