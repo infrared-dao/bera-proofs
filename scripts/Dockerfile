@@ -53,7 +53,7 @@ LABEL org.opencontainers.image.source="https://github.com/infrared-dao/bera-proo
       org.opencontainers.image.created="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
 # -------------------------------------------------------------------
-# 6. Entrypoint – choose which collector at `docker run`
+# 6. Entrypoint
 # -------------------------------------------------------------------
 
 # default network (can be overridden with `-e BEACON_NETWORK=…`)
