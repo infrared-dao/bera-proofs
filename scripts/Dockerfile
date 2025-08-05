@@ -37,10 +37,7 @@ RUN poetry install --no-ansi --no-interaction --no-root \
 # ------------------------------------------------------------------------------
 # 4. Copy project source code and install it (fast, local only)
 # ------------------------------------------------------------------------------
-COPY collector_common        ./collector_common
-COPY validator_collector     ./validator_collector
-COPY revenue_collector       ./revenue_collector
-COPY cross_chain_collector   ./cross_chain_collector
+COPY src ./src
 
 # Install console-script entry points *without* hitting the network again
 RUN poetry install --no-ansi --no-interaction --only-root
