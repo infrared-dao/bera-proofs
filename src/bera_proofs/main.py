@@ -390,12 +390,20 @@ def generate_validator_and_balance_proofs(state_file: str, validator_index: int)
         validator=validator,
         balance=balance
     )
-    
+
+    # Calculate total pending withdrawals for this validator
+    total_pending_withdrawals = sum(
+        withdrawal.amount
+        for withdrawal in state.pending_partial_withdrawals
+        if withdrawal.validator_index == validator_index
+    )
+
     metadata = {
         "balance_proof_length": len(full_proof_balance),
         "validator_proof_length": len(full_proof_validator),
         "balance": str(balance),
         "effective_balance": str(validator.effective_balance),
+        "total_pending_withdrawals": str(total_pending_withdrawals),
         "timestamp": state.latest_execution_payload_header.timestamp,
         "block_number": state.latest_execution_payload_header.block_number
     }
