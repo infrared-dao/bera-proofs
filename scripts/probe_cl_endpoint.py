@@ -21,6 +21,11 @@ Usage:
   ./scripts/probe_cl_endpoint.py https://host.example/<token>
   ./scripts/probe_cl_endpoint.py --endpoint "$CL_RPC_URL" --slots-back 8 --historical-state
 
+  # compare two endpoints' state shape without installing anything:
+  ./scripts/probe_cl_endpoint.py --dump-shape > a.shape   # endpoint A (via CL_RPC_URL)
+  ./scripts/probe_cl_endpoint.py --dump-shape > b.shape   # endpoint B
+  diff a.shape b.shape
+
 Env vars checked (first set wins): CL_RPC_URL, BEACON_RPC_URL_MAINNET, BEACON_RPC_URL.
 Exit code 0 iff all REQUIRED checks pass (head header, historical header, head state).
 The token is never printed: only scheme://host is shown.
@@ -114,6 +119,33 @@ def state_fields(j):
     return (pick("validators"), pick("balances"))
 
 
+def flatten_shape(obj, path="$"):
+    """Flatten JSON into sorted 'path: type' lines (no values) for diffing two
+    endpoints' response shapes. Only structure + scalar types are emitted — never
+    values — so it's secret-safe. Lists collapse to their element shape, so output
+    is slot-independent (modulo genuinely-empty arrays)."""
+    out = []
+    if isinstance(obj, dict):
+        out.append(f"{path}: object")
+        for k in sorted(obj.keys()):
+            out.extend(flatten_shape(obj[k], f"{path}.{k}"))
+    elif isinstance(obj, list):
+        out.append(f"{path}: list")
+        if obj:
+            out.extend(flatten_shape(obj[0], f"{path}[]"))  # element shape only
+    elif obj is None:
+        out.append(f"{path}: null")
+    elif isinstance(obj, bool):           # bool before int (bool is an int subclass)
+        out.append(f"{path}: bool")
+    elif isinstance(obj, int):
+        out.append(f"{path}: int")
+    elif isinstance(obj, float):
+        out.append(f"{path}: float")
+    else:
+        out.append(f"{path}: str")
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Probe a CL/beacon endpoint for bera-proofs' API surface.")
     ap.add_argument("endpoint", nargs="?", help="CL RPC base URL (or set CL_RPC_URL / BEACON_RPC_URL_MAINNET)")
@@ -123,6 +155,7 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=30.0, help="per-request timeout s (default 30, matches the client)")
     ap.add_argument("--historical-state", action="store_true", help="also fetch debug/state at current-slots_back (only needed if you generate proofs for past slots)")
     ap.add_argument("--max-parse-mb", type=float, default=128.0, help="skip JSON parse above this size (still reports status/bytes)")
+    ap.add_argument("--dump-shape", action="store_true", help="print the sorted key/type skeleton of debug/states/{slot} (no values) for diffing two endpoints — nothing sensitive is emitted")
     args = ap.parse_args()
 
     endpoint = args.endpoint or args.endpoint_flag
@@ -135,6 +168,18 @@ def main() -> int:
         print(f"ERROR: no endpoint. Pass one or set {' / '.join(ENV_VARS)}.", file=sys.stderr)
         return 2
     base = endpoint.rstrip("/")
+
+    if args.dump_shape:
+        # Value-free skeleton of the full state -> stdout (diffable); info -> stderr.
+        r = fetch(f"{base}/eth/v2/debug/beacon/states/{args.slot}", args.timeout, args.max_parse_mb)
+        print(f"# debug/states/{args.slot} shape from {redact(base)} "
+              f"(status={r['status']}, {human_bytes(r['bytes'])})", file=sys.stderr)
+        if r["status"] != 200 or not isinstance(r["json"], (dict, list)):
+            print(f"# ERROR: could not fetch/parse state: {r['error'] or r['status']}", file=sys.stderr)
+            return 1
+        for line in sorted(flatten_shape(r["json"])):
+            print(line)
+        return 0
 
     print(f"Target CL endpoint : {redact(base)}")
     print(f"Timeout / slots-back: {args.timeout:.0f}s / {args.slots_back}")
